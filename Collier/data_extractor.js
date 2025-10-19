@@ -40,7 +40,71 @@ function parseDateToISO(mdyy) {
         ? 1900 + Number(yy)
         : 2000 + Number(yy)
       : Number(yy);
+
+  // Validate the date is valid
+  const monthNum = parseInt(mm, 10);
+  const dayNum = parseInt(dd, 10);
+
+  // Check month range
+  if (monthNum < 1 || monthNum > 12) return null;
+
+  // Check day range (simple validation)
+  if (dayNum < 1 || dayNum > 31) return null;
+
+  // Check for invalid dates like Feb 30
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  // Leap year check
+  if ((yyyy % 4 === 0 && yyyy % 100 !== 0) || yyyy % 400 === 0) {
+    daysInMonth[1] = 29;
+  }
+  if (dayNum > daysInMonth[monthNum - 1]) return null;
+
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function capitalizeProperName(name) {
+  if (!name) return "";
+
+  // Trim and handle empty strings
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+
+  // Split on spaces, hyphens, apostrophes, but preserve the delimiters
+  const parts = trimmed.split(/(\s+|\-|'|,|\.)/);
+
+  const capitalized = parts.map((part, index) => {
+    // If it's a delimiter, keep it as is
+    if (/^(\s+|\-|'|,|\.)$/.test(part)) return part;
+
+    // Skip empty parts
+    if (!part) return part;
+
+    // Capitalize: first letter uppercase, rest lowercase
+    // Handle special cases like O'Brien, McDonald
+    if (part.length === 1) {
+      return part.toUpperCase();
+    }
+
+    // Check if previous part was an apostrophe or hyphen
+    const prevPart = index > 0 ? parts[index - 1] : null;
+    if (prevPart === "'" || prevPart === "-") {
+      // Capitalize after apostrophe or hyphen
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }
+
+    // Handle special prefixes (Mc, Mac, O')
+    if (part.toLowerCase().startsWith("mc") && part.length > 2) {
+      return "Mc" + part.charAt(2).toUpperCase() + part.slice(3).toLowerCase();
+    }
+    if (part.toLowerCase().startsWith("mac") && part.length > 3) {
+      return "Mac" + part.charAt(3).toUpperCase() + part.slice(4).toLowerCase();
+    }
+
+    // Standard capitalization
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+
+  return capitalized.join("");
 }
 
 function extractPropertyUsageType(useCodeText) {
@@ -791,9 +855,9 @@ function main() {
         } else if (owner.type === "person") {
           const person = {
             birth_date: owner.birth_date || null,
-            first_name: owner.first_name || "",
-            last_name: owner.last_name || "",
-            middle_name: owner.middle_name || null,
+            first_name: capitalizeProperName(owner.first_name) || "",
+            last_name: capitalizeProperName(owner.last_name) || "",
+            middle_name: owner.middle_name ? capitalizeProperName(owner.middle_name) : null,
             prefix_name: owner.prefix_name || null,
             suffix_name: owner.suffix_name || null,
             us_citizenship_status: owner.us_citizenship_status || null,
@@ -861,6 +925,17 @@ function main() {
   if (layoutEntry && Array.isArray(layoutEntry.layouts)) {
     for (const lay of layoutEntry.layouts) {
       if (lay && Object.keys(lay).length > 0) {
+        // Ensure space_index is an integer
+        if (lay.space_index === null || lay.space_index === undefined) {
+          lay.space_index = layoutIdx;
+        }
+
+        // Ensure is_finished is a boolean
+        if (typeof lay.is_finished !== 'boolean') {
+          // Default: exterior spaces are not finished, interior spaces are finished
+          lay.is_finished = lay.is_exterior === false;
+        }
+
         fs.writeFileSync(
           path.join(dataDir, `layout_${layoutIdx}.json`),
           JSON.stringify(lay, null, 2),
@@ -905,44 +980,89 @@ function main() {
 
     let layoutObj = null;
 
+    // Helper function to create complete layout object
+    const createLayoutObj = (spaceType, isExterior, idx, customFields = {}) => {
+      return {
+        adjustable_area_sq_ft: null,
+        area_under_air_sq_ft: null,
+        bathroom_renovation_date: null,
+        building_number: null,
+        cabinet_style: null,
+        clutter_level: null,
+        condition_issues: null,
+        countertop_material: null,
+        decor_elements: null,
+        design_style: null,
+        fixture_finish_quality: null,
+        floor_level: null,
+        flooring_installation_date: null,
+        flooring_material_type: null,
+        flooring_wear: null,
+        furnished: null,
+        has_windows: null,
+        heated_area_sq_ft: null,
+        is_exterior: isExterior,
+        is_finished: !isExterior, // Exterior spaces are not finished; interior spaces are finished
+        kitchen_renovation_date: null,
+        lighting_features: null,
+        livable_area_sq_ft: null,
+        natural_light_quality: null,
+        paint_condition: null,
+        pool_condition: null,
+        pool_equipment: null,
+        pool_installation_date: null,
+        pool_surface_type: null,
+        pool_type: null,
+        pool_water_quality: null,
+        request_identifier: null,
+        safety_features: null,
+        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
+        spa_installation_date: null,
+        spa_type: null,
+        space_index: idx, // Use the layout index as space_index
+        space_type: spaceType,
+        story_type: null,
+        total_area_sq_ft: null,
+        view_type: null,
+        visible_damage: null,
+        window_design_type: null,
+        window_material_type: null,
+        window_treatment_type: null,
+        ...customFields, // Override with specific values
+      };
+    };
+
     // POOL
     if (buildingClass.includes("POOL") && !buildingClass.includes("FENCE") && !buildingClass.includes("HOUSE")) {
-      layoutObj = {
-        space_type: "Outdoor Pool",
-        is_exterior: true,
-        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
+      const customFields = {
         pool_installation_date: yr ? `${yr}-01-01` : null,
       };
 
       // Add safety features if pool fence exists
       if (poolFenceExists.length > 0) {
-        layoutObj.safety_features = "Fencing";
+        customFields.safety_features = "Fencing";
       }
 
       // Add pool equipment if fountain exists
       if (fountainExists.length > 0) {
-        layoutObj.pool_equipment = "Fountain";
+        customFields.pool_equipment = "Fountain";
       }
+
+      layoutObj = createLayoutObj("Outdoor Pool", true, layoutIdx, customFields);
     }
 
     // SPA / HOT TUB
     else if (buildingClass.includes("SPA") || buildingClass.includes("JACUZZI") || buildingClass.includes("HOT TUB")) {
-      layoutObj = {
-        space_type: "Hot Tub / Spa Area",
-        is_exterior: true,
-        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
+      layoutObj = createLayoutObj("Hot Tub / Spa Area", true, layoutIdx, {
         spa_installation_date: yr ? `${yr}-01-01` : null,
-      };
+      });
     }
 
     // SCREEN ENCLOSURE
     else if (buildingClass.includes("SCREEN")) {
-      layoutObj = {
-        space_type: "Screened Porch",
-        is_exterior: false,
+      layoutObj = createLayoutObj("Screened Porch", false, layoutIdx, {
         is_finished: true,
-        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
-      };
+      });
     }
 
     // DECKING (TILE, BRICK, KEYSTONE, CONCRETE)
@@ -953,20 +1073,12 @@ function main() {
       buildingClass.includes("KEYSTONE") ||
       (buildingClass.includes("CONCRETE") && buildingClass.includes("SCULPTURED"))
     ) {
-      layoutObj = {
-        space_type: "Deck",
-        is_exterior: true,
-        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
-      };
+      layoutObj = createLayoutObj("Deck", true, layoutIdx, {});
     }
 
     // FOUNTAIN (only if not already added to pool equipment)
     else if (buildingClass.includes("FOUNTAIN") && poolFenceExists.length === 0) {
-      layoutObj = {
-        space_type: "Courtyard",
-        is_exterior: true,
-        size_square_feet: area && !isNaN(area) && area > 0 ? area : null,
-      };
+      layoutObj = createLayoutObj("Courtyard", true, layoutIdx, {});
     }
 
     // Write layout file if we created one
@@ -980,7 +1092,71 @@ function main() {
   });
 
   // Structure data from permits and building features
-  const structureObj = {};
+  const structureObj = {
+    architectural_style_type: null,
+    attachment_type: null,
+    ceiling_condition: null,
+    ceiling_height_average: null,
+    ceiling_insulation_type: null,
+    ceiling_structure_material: null,
+    ceiling_surface_material: null,
+    exterior_door_installation_date: null,
+    exterior_door_material: null,
+    exterior_wall_condition: null,
+    exterior_wall_condition_primary: null,
+    exterior_wall_condition_secondary: null,
+    exterior_wall_insulation_type: null,
+    exterior_wall_insulation_type_primary: null,
+    exterior_wall_insulation_type_secondary: null,
+    exterior_wall_material_primary: null,
+    exterior_wall_material_secondary: null,
+    finished_base_area: null,
+    finished_basement_area: null,
+    finished_upper_story_area: null,
+    flooring_condition: null,
+    flooring_material_primary: null,
+    flooring_material_secondary: null,
+    foundation_condition: null,
+    foundation_material: null,
+    foundation_repair_date: null,
+    foundation_type: null,
+    foundation_waterproofing: null,
+    gutters_condition: null,
+    gutters_material: null,
+    interior_door_material: null,
+    interior_wall_condition: null,
+    interior_wall_finish_primary: null,
+    interior_wall_finish_secondary: null,
+    interior_wall_structure_material: null,
+    interior_wall_structure_material_primary: null,
+    interior_wall_structure_material_secondary: null,
+    interior_wall_surface_material_primary: null,
+    interior_wall_surface_material_secondary: null,
+    number_of_buildings: null,
+    number_of_stories: null,
+    primary_framing_material: null,
+    request_identifier: null,
+    roof_age_years: null,
+    roof_condition: null,
+    roof_covering_material: null,
+    roof_date: null,
+    roof_design_type: null,
+    roof_material_type: null,
+    roof_structure_material: null,
+    roof_underlayment_type: null,
+    secondary_framing_material: null,
+    siding_installation_date: null,
+    structural_damage_indicators: null,
+    subfloor_material: null,
+    unfinished_base_area: null,
+    unfinished_basement_area: null,
+    unfinished_upper_story_area: null,
+    window_frame_material: null,
+    window_glazing_type: null,
+    window_installation_date: null,
+    window_operation_type: null,
+    window_screen_material: null,
+  };
 
   // Extract roof date from most recent ROOF permit
   let mostRecentRoofDate = null;
@@ -1019,13 +1195,11 @@ function main() {
     structureObj.number_of_buildings = buildingTypes.size;
   }
 
-  // Write structure.json if we have data
-  if (Object.keys(structureObj).length > 0) {
-    fs.writeFileSync(
-      path.join(dataDir, "structure.json"),
-      JSON.stringify(structureObj, null, 2),
-    );
-  }
+  // Always write structure.json with all required fields
+  fs.writeFileSync(
+    path.join(dataDir, "structure.json"),
+    JSON.stringify(structureObj, null, 2),
+  );
 
   // Tax from Summary and History
   // From Summary (preliminary/current)
