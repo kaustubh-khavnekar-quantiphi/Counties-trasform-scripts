@@ -2,6 +2,1257 @@ const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
+const propertyTypeMapping = [
+  {
+    "property_usecode": "FEDERAL (008800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MOBILE HOMES (000200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MobileHome",
+    "property_usage_type": "Residential",
+    "property_type": "MobileHome"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY (000100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "MOBILE HOMES (000220)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MobileHome",
+    "property_usage_type": "Residential",
+    "property_type": "MobileHome"
+  },
+  {
+    "property_usecode": "VACANT - RESIDENTIAL (000000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - STORAGE/BARN (000184)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "VACANT - EXTRA FEATURES (000070)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "TIMBERLAND - SITE INDEX 80 - 89 (005500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "GRAZING LAND 1 (006000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MINING (009200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - COMMERCIAL (000110)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Commercial",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "CHURCHES (007100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Church",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT - COMMERCIAL/EXTRA FEATURES (001010)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STORES - 1 STORY (001100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT - COMMERCIAL (001000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STATE (008700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WAREHOUSE - MINI/SELF STORAGE (004883)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WAREHOUSE - STORAGE (004800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "LUMBER YARDS (004300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT IND/XFOB (004110)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "GAS SYSTEM (009150)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - 1 STORY (001700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VEHICLE SALES/REPAIR (002700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PRIVATE SCHOOLS AND COLLEGES (007200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "COUNTY (008600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MORTUARIES/CEMETERIES (007600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "NON-AGRICULTURAL ACREAGE (009900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CROPLAND CLASS 2 (005200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "HOLDING POND (009706)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "COMMON AREA (009705)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
+  },
+  {
+    "property_usecode": "UTILITY (009100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "RIGHTS-OF-WAY (009400)",
+    "ownership_estate_type": "RightOfWay",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "VACANT - GOVERNMENTAL/WATER MANAGEMENT (008000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "WASTE LAND, DUMP, PITS, SWAMPS, MARSH (009600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - MODULAR HOME (000105)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "TIMBERLAND - SITE INDEX 70 - 79 (005600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - BAYOU (000120)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - BAYFRONT (000130)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "TIMBERLAND - SITE INDEX 90 AND ABOVE (005400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CROPLAND CLASS 3 (005300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "FOREST, PARKS, TIITF (008200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "VACANT - INDUSTRIAL (004000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MULTI-FAMILY - LESS THAN 10 UNITS (000800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
+  },
+  {
+    "property_usecode": "SUB-SURFACE RIGHTS (009300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MINERAL RIGHT (009700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STORES - CONVENIENCE (001101)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "PARKING LOTS/MOBILE HOME PARKS (002800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - SOUND (000133)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - SUPER STRUCTURE (000107)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - CANAL (000131)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - TOWNHOUSE (000109)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "TownhouseRowhouse",
+    "property_usage_type": "Residential",
+    "property_type": "Townhouse"
+  },
+  {
+    "property_usecode": "MIXED GROVE (006640)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CROPLAND CLASS 1 (005100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CAR WASH (002585)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - RIVER (000132)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "PUBLIC SCHOOLS (008300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VOLUNTEER FIRE DEPARTMENT (007704)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - MODULAR (001702)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RETAIL - MULTI-TENANT (001611)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "LIGHT MANUFACTURING (004100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "COMM / XFOB (001199)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "WATER SYSTEM (009140)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CLUBS/LODGES/UNION HALLS (007700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - LAKE (000134)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "RIVERS, LAKES (009500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - GOLF (000140)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "GOLF COURSES (003800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MUNICIPAL (008900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CELL TOWERS (004199)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CULTURAL ORGANIZATIONS (007900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SUPERMARKETS (001400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STORES - OFFICE/RESIDENTIAL (001200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SERVICE/REPAIR SHOPS (002500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "FINANCIAL INSTITUTIONS (002300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PROFESSIONAL SERVICE BUILDINGS (001900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "BEAUTY/BARBER SHOPS (002525)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RESTAURANTS/CAFETERIAS (002100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RESTAURANTS - FAST FOOD (002157)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - INSURANCE COMPANY (002400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - MEDICAL (001952)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MUNICIPAL - SPORTS/RECREATIONAL (008910)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RETIREMENT HOMES (000600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MULTI-FAMILY - 10 UNITS OR MORE (000300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "NIGHTCLUBS/BARS (003300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - MULTI STORY (001800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TOURIST ATTRACTIONS (003500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT - INSTITUTIONAL (007000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "OFFICES - MULTI-TENANT (001711)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT - INSTITUTIONAL/EXTRA FEATURES (007010)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "NON-PROFIT SERVICES (007500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "STORES - DISCOUNT (001136)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "OTHER FOOD PROCESSING (004600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "GRAZING LAND 2 (006100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CAMPS (003600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SHOPPING CENTERS - COMMUNITY (001600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "HOTELS/MOTELS (003900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "POST OFFICE (008879)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SHOPPING CENTERS - NEIGHBORHOOD (001638)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "DEPARTMENT STORES (001300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "ORNAMENTALS, MISCELLANEOUS (006900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "NURSERY (006930)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CONSERVATION PARCEL (009703)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "GYM/FITNESS CENTERS (003435)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WHOLESALE OUTLETS (002900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "PRIVATE HOSPITALS (007300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CONDOMINIUM - OFFICE (000417)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Condominium"
+  },
+  {
+    "property_usecode": "TIMBERLAND - SITE INDEX 60 - 69 (005700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "COE WETLANDS (009620)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MILITARY (008100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "FLORISTS/GREENHOUSES (003000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CONDOMINIUMS (000400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "Condominium"
+  },
+  {
+    "property_usecode": "INDUSTRIAL - OFFICES (004177)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "BLUEBERRIES (006614)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "COUNTY - SPORTS/RECREATIONAL (008610)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MUNICIPAL - ADMINISTRATION (008920)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "AQUACULTURE (006720)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "RESTAURANTS - DRIVE-IN (002200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "COLLEGES (008400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "LAUNDRY/DRYCLEANERS (002534)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "POULTRY, BEES, FISH (006700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "ORCHARD GORVES, CITRUS, ETC (006600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STATE - SPORTS/RECREATIONAL (008710)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WAREHOUSE - BOAT STORAGE (004805)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OPEN STORAGE (004900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WETLANDS (009610)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "FLEA MARKET (001111)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CELL SITE (001099)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STORES - SUPER DISCOUNT (001137)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "ROAD (009707)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "THEATERS/AUDITORIUMS (003200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RACE TRACKS (003700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "HEAVY INDUSTRIAL (004200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PARKING/MH PARK (002802)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "CHURCHES - SINGLE-FAMILY RESIDENTIAL (007101)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WAREHOUSE - COMPLEX (004809)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RV PARKS (002825)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "COUNTY - ADMINISTRATION (008620)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CANNERIES/BOTTLERS (004500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TELECOMMUNICATION (009110)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "GRAZING LAND 3 (006200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "ZOO (003510)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SWINE (006820)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MUNICIPAL - PUBLIC WORKS (008930)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SANITARIUMS, CONVALESCENT, AND REST HOMES (007800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SEWAGE SYSTEM (009120)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "SERVICE STATIONS (002600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "BOWLING/RECREATION (003400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MINERAL PROCESSING (004700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "GRAZING LAND 4 (006300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "STATE - PRISON (008787)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CONDOMINIUM PARKING SPACE (000004)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "Condominium"
+  },
+  {
+    "property_usecode": "HOMES FOR THE AGED (007400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "HOSPITALS (008500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": null,
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "OFFICES - COMPLEX (001709)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "AIRPORTS/TRANSIT TERMINALS/MARINAS (002000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CENTERALLY ASSESSED (009800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  }
+];
+
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
@@ -247,29 +1498,39 @@ function parseValuationTable($) {
   return out;
 }
 
+const propertyTypeByUseCode = propertyTypeMapping.reduce((lookup, entry) => {
+  if (!entry || !entry.property_usecode) {
+    return lookup;
+  }
+
+  const normalizedUseCode = entry.property_usecode.replace(/\s+/g, "").toUpperCase();
+
+  if (!normalizedUseCode) {
+    return lookup;
+  }
+
+  lookup[normalizedUseCode] = entry;
+  return lookup;
+}, {});
+
+function mapPropertyTypeFromUseCode(code) {
+  if (!code && code !== 0) return null;
+
+  const normalizedInput = String(code).replace(/\s+/g, "").toUpperCase();
+  if (!normalizedInput) return null;
+
+  if (Object.prototype.hasOwnProperty.call(propertyTypeByUseCode, normalizedInput)) {
+    return propertyTypeByUseCode[normalizedInput];
+  }
+
+  return null;
+}
+
 function mapPropertyType(parcelInfo) {
   if (parcelInfo && parcelInfo.propertyUsage) {
-    const propertyUsageText = parcelInfo.propertyUsage.toLowerCase();
-    if (propertyUsageText.includes("vacant")) {
-      if (propertyUsageText.includes("residential")) {
-        return "VacantLand";
-      }
-    }
-    if (propertyUsageText.includes("single family")) return "SingleFamily";
-    if (propertyUsageText.includes("condominium")) return "Condominium";
-    if (propertyUsageText.includes("mobile home")) return "MobileHome";
-    if (propertyUsageText.includes("multi-family")) {
-      if (propertyUsageText.includes("000300")) {
-        return "MultiFamilyMoreThan10"
-      }
-      if (propertyUsageText.includes("000800")) {
-        return "MultiFamilyLessThan10"
-      }
-      return "MultipleFamily";
-    }
-    if (propertyUsageText.includes("retirement")) return "Retirement";
+    return mapPropertyTypeFromUseCode(parcelInfo.propertyUsage);
   }
-  throw new Error("Non residential property type");
+  throw null;
 }
 
 function main() {
@@ -303,24 +1564,25 @@ function main() {
   //   propertyType = "VacantLand";
   // }
 
-  const remixData =
+  let remixData =
     remix &&
     remix.state &&
     remix.state.loaderData &&
     remix.state.loaderData["routes/_index"]
       ? remix.state.loaderData["routes/_index"]
       : {};
-
-  const parcelInfo = remixData.parcelInformation || {};
-  let propertyType;
-  if (parcelId && parcelId.trim().endsWith("M")) {
-    propertyType = "Commercial";
-    throw new Error("Mineral rights");
-  } else {
-    propertyType = mapPropertyType(parcelInfo);
+  if (Object.keys(remixData).length === 0) {
+    remixData =
+    remix &&
+    remix.state &&
+    remix.state.loaderData &&
+    remix.state.loaderData["routes/mineral"]
+      ? remix.state.loaderData["routes/mineral"] : {};
   }
-  if (!propertyType) {
-    throw new Error("Non residential property");
+  const parcelInfo = remixData.parcelInformation || {};
+  const propertyMapping = mapPropertyType(parcelInfo);
+  if (!propertyMapping) {
+    throw new Error("Property type not found");
   }
   const buildings = remixData.buildings || {};
   // console.log('Number of buildings:', remixData.buildings?.units?.length || 0);
@@ -382,7 +1644,11 @@ function main() {
   // PROPERTY
   const property = {
     parcel_identifier: parcelId,
-    property_type: propertyType,
+    property_type: propertyMapping.property_type,
+    ownership_estate_type: propertyMapping.ownership_estate_type,
+    build_status: propertyMapping.build_status,
+    structure_form: propertyMapping.structure_form,
+    property_usage_type: propertyMapping.property_usage_type,
     property_structure_built_year: structureBuiltYear,
     property_effective_built_year: effectiveBuiltYear,
     property_legal_description_text: parcelInfo.legalDescription || null,
