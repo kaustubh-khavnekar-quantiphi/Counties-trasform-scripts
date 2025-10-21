@@ -127,6 +127,1482 @@ function extractWorkingTaxValues($) {
   return r;
 }
 
+/**
+ * @typedef {"LandParcel"|"Building"|"Unit"|"ManufacturedHome"} LexiconPropertyType
+ */
+
+/**
+ * @typedef {"Residential"|"Commercial"|"Industrial"|"Agricultural"|"Recreational"|"Conservation"|"Retirement"|"ResidentialCommonElementsAreas"|"DrylandCropland"|"HayMeadow"|"CroplandClass2"|"CroplandClass3"|"TimberLand"|"GrazingLand"|"OrchardGroves"|"Poultry"|"Ornamentals"|"Church"|"PrivateSchool"|"PrivateHospital"|"HomesForAged"|"NonProfitCharity"|"MortuaryCemetery"|"ClubsLodges"|"SanitariumConvalescentHome"|"CulturalOrganization"|"Military"|"ForestParkRecreation"|"PublicSchool"|"PublicHospital"|"GovernmentProperty"|"RetailStore"|"DepartmentStore"|"Supermarket"|"ShoppingCenterRegional"|"ShoppingCenterCommunity"|"OfficeBuilding"|"MedicalOffice"|"TransportationTerminal"|"Restaurant"|"FinancialInstitution"|"ServiceStation"|"AutoSalesRepair"|"MobileHomePark"|"WholesaleOutlet"|"Theater"|"Entertainment"|"Hotel"|"RaceTrack"|"GolfCourse"|"LightManufacturing"|"HeavyManufacturing"|"LumberYard"|"PackingPlant"|"Cannery"|"MineralProcessing"|"Warehouse"|"OpenStorage"|"Utility"|"RiversLakes"|"SewageDisposal"|"Railroad"|"TransitionalProperty"|"ReferenceParcel"|"NurseryGreenhouse"|"AgriculturalPackingFacility"|"LivestockFacility"|"Aquaculture"|"VineyardWinery"|"DataCenter"|"TelecommunicationsFacility"|"SolarFarm"|"WindFarm"|"NativePasture"|"ImprovedPasture"|"Rangeland"|"PastureWithTimber"|"Unknown"} LexiconPropertyUsageType
+ */
+
+/**
+ * @typedef {"Condominium"|"Cooperative"|"LifeEstate"|"Timeshare"|"OtherEstate"|"FeeSimple"|"Leasehold"|"RightOfWay"|"NonWarrantableCondo"|"SubsurfaceRights"|null} LexiconOwnershipEstateType
+ */
+
+/**
+ * @typedef {"SingleFamilyDetached"|"SingleFamilySemiDetached"|"TownhouseRowhouse"|"Duplex"|"Triplex"|"Quadplex"|"MultiFamily5Plus"|"ApartmentUnit"|"Loft"|"ManufacturedHomeOnLand"|"ManufacturedHomeInPark"|"MultiFamilyMoreThan10"|"MultiFamilyLessThan10"|"MobileHome"|"ManufacturedHousingMultiWide"|"ManufacturedHousing"|"ManufacturedHousingSingleWide"|"Modular"|null} LexiconStructureForm
+ */
+
+/**
+ * @typedef {"VacantLand"|"Improved"|"UnderConstruction"|null} LexiconBuildStatus
+ */
+
+/**
+ * @typedef {Object} PropertyUseMappingDetail
+ * @property {LexiconPropertyType} propertyType
+ * @property {LexiconPropertyUsageType|null} propertyUsageType
+ * @property {LexiconOwnershipEstateType} ownershipEstateType
+ * @property {LexiconStructureForm} structureForm
+ * @property {LexiconBuildStatus} buildStatus
+ * @property {readonly string[]} descriptors
+ */
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizePropertyUseLabel(value) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** @type {Record<string, PropertyUseMappingDetail>} */
+const PROPERTY_USE_MAPPINGS = {
+  "0000": {
+    descriptors: [
+      "0000",
+      "0000 Vacant Residential",
+      "Vacant Residential",
+      "Residential Vacant",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "0100": {
+    descriptors: [
+      "0100",
+      "0100 Single Family",
+      "Single Family",
+      "Single-Family Residence",
+      "Single Family Residence",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "SingleFamilyDetached",
+    buildStatus: "Improved",
+  },
+  "0200": {
+    descriptors: [
+      "0200",
+      "0200 Mobile Homes",
+      "Mobile Home",
+      "Mobile Homes",
+      "Manufactured Home",
+    ],
+    propertyType: "MobileHome",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MobileHome",
+    buildStatus: "Improved",
+  },
+  "0300": {
+    descriptors: [
+      "0300",
+      "0300 Multi-Family(10 or More Units)",
+      "Multi-Family(10 or More Units)",
+      "Multi Family 10 Or More Units",
+      "MFR >10 Units",
+      "MFR Greater Than 10 Units",
+      "Multi Family Greater Than 10 Units",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MultiFamilyMoreThan10",
+    buildStatus: "Improved",
+  },
+  "0400": {
+    descriptors: [
+      "0400",
+      "0400 Condominia",
+      "Condominia",
+      "Condominium",
+      "Condo",
+    ],
+    propertyType: "Unit",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "Condominium",
+    structureForm: "ApartmentUnit",
+    buildStatus: "Improved",
+  },
+  "0500": {
+    descriptors: [
+      "0500",
+      "0500 Cooperatives",
+      "Cooperative",
+      "Cooperatives",
+    ],
+    propertyType: "Unit",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "Cooperative",
+    structureForm: "ApartmentUnit",
+    buildStatus: "Improved",
+  },
+  "0600": {
+    descriptors: [
+      "0600",
+      "0600 Retirement Homes Not Eligible",
+      "Retirement Homes Not Eligible",
+      "Retirement Home",
+      "Retirement Facility",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Retirement",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MultiFamily5Plus",
+    buildStatus: "Improved",
+  },
+  "0700": {
+    descriptors: [
+      "0700",
+      "0700 Miscellaneous Residential",
+      "Miscellaneous Residential",
+      "Misc Residential",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "0800": {
+    descriptors: [
+      "0800",
+      "0800 Multi-Family(Less than 10 Units)",
+      "Multi-Family(Less than 10 Units)",
+      "Multi Family Less Than 10 Units",
+      "MFR <10 Units",
+      "MFR Less Than 10 Units",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Residential",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MultiFamilyLessThan10",
+    buildStatus: "Improved",
+  },
+  "0900": {
+    descriptors: [
+      "0900",
+      "0900 Residential Common Elements/Areas",
+      "Residential Common Elements/Areas",
+      "Residential Common Elements",
+      "Res Common Elements",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "ResidentialCommonElementsAreas",
+    ownershipEstateType: "Condominium",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1000": {
+    descriptors: [
+      "1000",
+      "1000 Vacant Commercial",
+      "Vacant Commercial",
+      "Commercial Vacant",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Commercial",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "1100": {
+    descriptors: [
+      "1100",
+      "1100 Stores, One Story",
+      "Stores, One Story",
+      "Store One Story",
+      "Retail Store",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "RetailStore",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1200": {
+    descriptors: [
+      "1200",
+      "1200 Mixed Use, Store/Office/Resi",
+      "Mixed Use, Store/Office/Resi",
+      "Mixed Use",
+      "Mixed Use Store Office Residential",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Commercial",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1300": {
+    descriptors: [
+      "1300",
+      "1300 Department Store",
+      "Department Store",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "DepartmentStore",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1400": {
+    descriptors: [
+      "1400",
+      "1400 Supermarkets",
+      "Supermarket",
+      "Supermarkets",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Supermarket",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1500": {
+    descriptors: [
+      "1500",
+      "1500 Regional Shopping Centers",
+      "Regional Shopping Centers",
+      "Regional Shopping Center",
+      "Shopping Center Regional",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "ShoppingCenterRegional",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1600": {
+    descriptors: [
+      "1600",
+      "1600 Community Shopping Centers",
+      "Community Shopping Centers",
+      "Community Shopping Center",
+      "Shopping Center Community",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "ShoppingCenterCommunity",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1700": {
+    descriptors: [
+      "1700",
+      "1700 Office Buildings/Nonprof/One",
+      "Office Buildings/Nonprof/One",
+      "Office Building One Story",
+      "Office Building",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "OfficeBuilding",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1800": {
+    descriptors: [
+      "1800",
+      "1800 Office Buildings/Nonprof/Multi",
+      "Office Buildings/Nonprof/Multi",
+      "Office Building Multi Story",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "OfficeBuilding",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "1900": {
+    descriptors: [
+      "1900",
+      "1900 Professional Office",
+      "Professional Office",
+      "Professional Offices",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "OfficeBuilding",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2000": {
+    descriptors: [
+      "2000",
+      "2000 Airports, Terminals, Piers",
+      "Airports, Terminals, Piers",
+      "Airport",
+      "Terminal",
+      "Pier",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "TransportationTerminal",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2100": {
+    descriptors: [
+      "2100",
+      "2100 Restaurants, Cafeterias",
+      "Restaurants, Cafeterias",
+      "Restaurant",
+      "Cafeteria",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Restaurant",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2200": {
+    descriptors: [
+      "2200",
+      "2200 Drive In Restaurants",
+      "Drive In Restaurants",
+      "Drive-In Restaurant",
+      "Drive Thru Restaurant",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Restaurant",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2300": {
+    descriptors: [
+      "2300",
+      "2300 Financial Institutions",
+      "Financial Institutions",
+      "Financial Institution",
+      "Bank",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "FinancialInstitution",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2400": {
+    descriptors: [
+      "2400",
+      "2400 Insurance Company Offices",
+      "Insurance Company Offices",
+      "Insurance Office",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "OfficeBuilding",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2500": {
+    descriptors: [
+      "2500",
+      "2500 Repair Service Shops",
+      "Repair Service Shops",
+      "Repair Shop",
+      "Service Shop",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Commercial",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2600": {
+    descriptors: [
+      "2600",
+      "2600 Service Stations",
+      "Service Stations",
+      "Service Station",
+      "Gas Station",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "ServiceStation",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2700": {
+    descriptors: [
+      "2700",
+      "2700 Auto Sales, Repair & Related",
+      "Auto Sales, Repair & Related",
+      "Auto Sales",
+      "Auto Repair",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "AutoSalesRepair",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2800": {
+    descriptors: [
+      "2800",
+      "2800 Parking Lots, Commercial, MHPs",
+      "Parking Lots, Commercial, MHPs",
+      "Parking Lots",
+      "Commercial Parking",
+      "Mobile Home Park",
+      "MHP",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "MobileHomePark",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "2900": {
+    descriptors: [
+      "2900",
+      "2900 Produce and Fishhouses Whole",
+      "Produce and Fishhouses Whole",
+      "Produce House",
+      "Fish House",
+      "Wholesale Produce",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "WholesaleOutlet",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3000": {
+    descriptors: [
+      "3000",
+      "3000 Florists, Greenhouses",
+      "Florists, Greenhouses",
+      "Florist",
+      "Greenhouse",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "NurseryGreenhouse",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3100": {
+    descriptors: [
+      "3100",
+      "3100 Drive In Theatres, Open Stage",
+      "Drive In Theatres, Open Stage",
+      "Drive-In Theatre",
+      "Open Stage",
+      "Outdoor Theatre",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Theater",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3200": {
+    descriptors: [
+      "3200",
+      "3200 Enclosed Theatres/Auditoriums",
+      "Enclosed Theatres/Auditoriums",
+      "Enclosed Theatre",
+      "Auditorium",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Theater",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3300": {
+    descriptors: [
+      "3300",
+      "3300 Night Clubs, Lounges, Bars",
+      "Night Clubs, Lounges, Bars",
+      "Night Club",
+      "Lounge",
+      "Bar",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Entertainment",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3400": {
+    descriptors: [
+      "3400",
+      "3400 Bowling, Skating, Pool, Arenas",
+      "Bowling, Skating, Pool, Arenas",
+      "Bowling Alley",
+      "Skating Rink",
+      "Arena",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Entertainment",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3500": {
+    descriptors: [
+      "3500",
+      "3500 Tourist Attraction, Exhibits",
+      "Tourist Attraction, Exhibits",
+      "Tourist Attraction",
+      "Exhibit",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Entertainment",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3600": {
+    descriptors: [
+      "3600",
+      "3600 Camps",
+      "Camps",
+      "Campground",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Recreational",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3700": {
+    descriptors: [
+      "3700",
+      "3700 Race Tracks, Horse/Auto/Dog",
+      "Race Tracks, Horse/Auto/Dog",
+      "Race Track",
+      "Racetrack",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "RaceTrack",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3800": {
+    descriptors: [
+      "3800",
+      "3800 Golf Courses, Driving Ranges",
+      "Golf Courses, Driving Ranges",
+      "Golf Course",
+      "Driving Range",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GolfCourse",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "3900": {
+    descriptors: [
+      "3900",
+      "3900 Hotels, Motels",
+      "Hotels, Motels",
+      "Hotel",
+      "Motel",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Hotel",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4000": {
+    descriptors: [
+      "4000",
+      "4000 Vacant Industrial",
+      "Vacant Industrial",
+      "Industrial Vacant",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Industrial",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "4100": {
+    descriptors: [
+      "4100",
+      "4100 Light Industrial",
+      "Light Industrial",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "LightManufacturing",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4200": {
+    descriptors: [
+      "4200",
+      "4200 Heavy Industrial",
+      "Heavy Industrial",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "HeavyManufacturing",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4300": {
+    descriptors: [
+      "4300",
+      "4300 Lumber Yd/Mill",
+      "Lumber Yd/Mill",
+      "Lumber Yard",
+      "Lumber Mill",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "LumberYard",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4400": {
+    descriptors: [
+      "4400",
+      "4400 Packing Fruit/Vegi/Meats",
+      "Packing Fruit/Vegi/Meats",
+      "Packing Plant",
+      "Fruit Packing",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PackingPlant",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4500": {
+    descriptors: [
+      "4500",
+      "4500 Canneries Fruit/Vegi/Bottlers",
+      "Canneries Fruit/Vegi/Bottlers",
+      "Cannery",
+      "Bottler",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Cannery",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4600": {
+    descriptors: [
+      "4600",
+      "4600 Other Food Processing",
+      "Other Food Processing",
+      "Food Processing",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "LightManufacturing",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4700": {
+    descriptors: [
+      "4700",
+      "4700 Mineral or Phosphate Processing",
+      "Mineral or Phosphate Processing",
+      "Mineral Processing",
+      "Phosphate Processing",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "MineralProcessing",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4800": {
+    descriptors: [
+      "4800",
+      "4800 Warehousing, Distribution",
+      "Warehousing, Distribution",
+      "Warehouse",
+      "Distribution Center",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Warehouse",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "4900": {
+    descriptors: [
+      "4900",
+      "4900 Open Storage, Supply/Junkyards",
+      "Open Storage, Supply/Junkyards",
+      "Open Storage",
+      "Junkyard",
+      "Supply Yard",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "OpenStorage",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5000": {
+    descriptors: [
+      "5000",
+      "5000 Improved Agriculture",
+      "Improved Agriculture",
+      "Agriculture Improved",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Agricultural",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5100": {
+    descriptors: [
+      "5100",
+      "5100 Cropland, Class I",
+      "Cropland, Class I",
+      "Cropland Class 1",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "DrylandCropland",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5200": {
+    descriptors: [
+      "5200",
+      "5200 Cropland, Class II",
+      "Cropland, Class II",
+      "Cropland Class 2",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "CroplandClass2",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5300": {
+    descriptors: [
+      "5300",
+      "5300 Cropland, Class III",
+      "Cropland, Class III",
+      "Cropland Class 3",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "CroplandClass3",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5400": {
+    descriptors: [
+      "5400",
+      "5400 Timberland, Index 90+",
+      "Timberland, Index 90+",
+      "Timberland Index 90+",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5500": {
+    descriptors: [
+      "5500",
+      "5500 Timberland, Index 80-89",
+      "Timberland, Index 80-89",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5600": {
+    descriptors: [
+      "5600",
+      "5600 Timberland, Index 70-79",
+      "Timberland, Index 70-79",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5700": {
+    descriptors: [
+      "5700",
+      "5700 Timberland, Index 60-69",
+      "Timberland, Index 60-69",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5800": {
+    descriptors: [
+      "5800",
+      "5800 Timberland, Index 50-59",
+      "Timberland, Index 50-59",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "5900": {
+    descriptors: [
+      "5900",
+      "5900 Timberland, Not Classed",
+      "Timberland, Not Classed",
+      "Timberland Not Classed",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TimberLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6000": {
+    descriptors: [
+      "6000",
+      "6000 Grazing, Class I",
+      "Grazing, Class I",
+      "Grazing Class 1",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6100": {
+    descriptors: [
+      "6100",
+      "6100 Grazing, Class II",
+      "Grazing, Class II",
+      "Grazing Class 2",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6200": {
+    descriptors: [
+      "6200",
+      "6200 Grazing, Class III",
+      "Grazing, Class III",
+      "Grazing Class 3",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6300": {
+    descriptors: [
+      "6300",
+      "6300 Grazing, Class IV",
+      "Grazing, Class IV",
+      "Grazing Class 4",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6400": {
+    descriptors: [
+      "6400",
+      "6400 Grazing, Class V",
+      "Grazing, Class V",
+      "Grazing Class 5",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6500": {
+    descriptors: [
+      "6500",
+      "6500 Grazing, Class VI",
+      "Grazing, Class VI",
+      "Grazing Class 6",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GrazingLand",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6600": {
+    descriptors: [
+      "6600",
+      "6600 Orchard, Groves, Citrus",
+      "Orchard, Groves, Citrus",
+      "Orchard",
+      "Grove",
+      "Citrus Grove",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "OrchardGroves",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6700": {
+    descriptors: [
+      "6700",
+      "6700 Poultry, Bees, Fish",
+      "Poultry, Bees, Fish",
+      "Poultry",
+      "Bee Farm",
+      "Fish Farm",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "LivestockFacility",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6800": {
+    descriptors: [
+      "6800",
+      "6800 Dairy, Feed Lots",
+      "Dairy, Feed Lots",
+      "Dairy Farm",
+      "Feed Lot",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "LivestockFacility",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "6900": {
+    descriptors: [
+      "6900",
+      "6900 Ornamentals, Misc Ag",
+      "Ornamentals, Misc Ag",
+      "Ornamental Nursery",
+      "Misc Agriculture",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Ornamentals",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7000": {
+    descriptors: [
+      "7000",
+      "7000 Vacant Institutional",
+      "Vacant Institutional",
+      "Institutional Vacant",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TransitionalProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "7100": {
+    descriptors: [
+      "7100",
+      "7100 Churches",
+      "Churches",
+      "Church",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Church",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7200": {
+    descriptors: [
+      "7200",
+      "7200 Private Schools/Colleges",
+      "Private Schools/Colleges",
+      "Private School",
+      "Private College",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PrivateSchool",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7300": {
+    descriptors: [
+      "7300",
+      "7300 Privately Owned Hospitals",
+      "Privately Owned Hospitals",
+      "Private Hospital",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PrivateHospital",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7400": {
+    descriptors: [
+      "7400",
+      "7400 Homes for the Aged",
+      "Homes for the Aged",
+      "Home for the Aged",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "HomesForAged",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MultiFamily5Plus",
+    buildStatus: "Improved",
+  },
+  "7500": {
+    descriptors: [
+      "7500",
+      "7500 Orphanages, Other Services",
+      "Orphanages, Other Services",
+      "Orphanage",
+      "Other Services",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "NonProfitCharity",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7600": {
+    descriptors: [
+      "7600",
+      "7600 Mortuaries, Cemeteries",
+      "Mortuaries, Cemeteries",
+      "Mortuary",
+      "Cemetery",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "MortuaryCemetery",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7700": {
+    descriptors: [
+      "7700",
+      "7700 Clubs, Lodges, Union Halls",
+      "Clubs, Lodges, Union Halls",
+      "Club",
+      "Lodge",
+      "Union Hall",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "ClubsLodges",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "7800": {
+    descriptors: [
+      "7800",
+      "7800 Sanitary, Convalescent Homes",
+      "Sanitary, Convalescent Homes",
+      "Convalescent Home",
+      "Sanitarium",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "SanitariumConvalescentHome",
+    ownershipEstateType: "FeeSimple",
+    structureForm: "MultiFamily5Plus",
+    buildStatus: "Improved",
+  },
+  "7900": {
+    descriptors: [
+      "7900",
+      "7900 Cultural Organization Facil",
+      "Cultural Organization Facil",
+      "Cultural Organization Facility",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "CulturalOrganization",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8000": {
+    descriptors: [
+      "8000",
+      "8000 Vacant Governmental",
+      "Vacant Governmental",
+      "Governmental Vacant",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "8100": {
+    descriptors: [
+      "8100",
+      "8100 Military",
+      "Military",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Military",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8200": {
+    descriptors: [
+      "8200",
+      "8200 Forest, Parks, Recreation Area",
+      "Forest, Parks, Recreation Area",
+      "Forest",
+      "Park",
+      "Recreation Area",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "ForestParkRecreation",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8300": {
+    descriptors: [
+      "8300",
+      "8300 Public County School",
+      "Public County School",
+      "Public School",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PublicSchool",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8400": {
+    descriptors: [
+      "8400",
+      "8400 Colleges",
+      "Colleges",
+      "College",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PublicSchool",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8500": {
+    descriptors: [
+      "8500",
+      "8500 Hospitals",
+      "Hospitals",
+      "Hospital",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "PublicHospital",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8600": {
+    descriptors: [
+      "8600",
+      "8600 County",
+      "County",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8700": {
+    descriptors: [
+      "8700",
+      "8700 State",
+      "State",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8800": {
+    descriptors: [
+      "8800",
+      "8800 Federal",
+      "Federal",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "8900": {
+    descriptors: [
+      "8900",
+      "8900 Municipal",
+      "Municipal",
+      "Municipality",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9000": {
+    descriptors: [
+      "9000",
+      "9000 Leasehold Interests, Govt Ownd",
+      "Leasehold Interests, Govt Ownd",
+      "Government Leasehold",
+      "Leasehold Interest",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "GovernmentProperty",
+    ownershipEstateType: "Leasehold",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9100": {
+    descriptors: [
+      "9100",
+      "9100 Utilities",
+      "Utilities",
+      "Utility",
+    ],
+    propertyType: "Building",
+    propertyUsageType: "Utility",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9200": {
+    descriptors: [
+      "9200",
+      "9200 Mining, Petrolium/Gas",
+      "Mining, Petrolium/Gas",
+      "Mining",
+      "Petroleum",
+      "Gas Extraction",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "MineralProcessing",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9300": {
+    descriptors: [
+      "9300",
+      "9300 Subsurface Rights",
+      "Subsurface Rights",
+      "Mineral Rights",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "ReferenceParcel",
+    ownershipEstateType: "SubsurfaceRights",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "9400": {
+    descriptors: [
+      "9400",
+      "9400 Rights-of-Way",
+      "Rights-of-Way",
+      "Right of Way",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "ReferenceParcel",
+    ownershipEstateType: "RightOfWay",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "9500": {
+    descriptors: [
+      "9500",
+      "9500 Rivers, Lakes, Submerged Lands",
+      "Rivers, Lakes, Submerged Lands",
+      "River",
+      "Lake",
+      "Submerged Land",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "RiversLakes",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "9600": {
+    descriptors: [
+      "9600",
+      "9600 Waste Land, Drainage Resrvrs, Borrow Pit",
+      "Waste Land, Drainage Resrvrs, Borrow Pit",
+      "Waste Land",
+      "Drainage Reservoir",
+      "Borrow Pit",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "SewageDisposal",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+  "9700": {
+    descriptors: [
+      "9700",
+      "9700 Outdoor Recreational",
+      "Outdoor Recreational",
+      "Outdoor Recreation",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Recreational",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9801": {
+    descriptors: [
+      "9801",
+      "9801 C/A Railroad Cars",
+      "C/A Railroad Cars",
+      "CA Railroad Cars",
+      "Railroad Cars",
+    ],
+    propertyType: "Unit",
+    propertyUsageType: "Railroad",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9802": {
+    descriptors: [
+      "9802",
+      "9802 C/A Railroad",
+      "C/A Railroad",
+      "CA Railroad",
+      "Railroad",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "Railroad",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9803": {
+    descriptors: [
+      "9803",
+      "9803 C/A TPP",
+      "C/A TPP",
+      "CA TPP",
+      "Centrally Assessed TPP",
+    ],
+    propertyType: "Unit",
+    propertyUsageType: "ReferenceParcel",
+    ownershipEstateType: "OtherEstate",
+    structureForm: null,
+    buildStatus: "Improved",
+  },
+  "9900": {
+    descriptors: [
+      "9900",
+      "9900 Vacant Acreage, Not Agri",
+      "Vacant Acreage, Not Agri",
+      "Vacant Acreage",
+      "Vacant Non Agricultural",
+    ],
+    propertyType: "LandParcel",
+    propertyUsageType: "TransitionalProperty",
+    ownershipEstateType: "FeeSimple",
+    structureForm: null,
+    buildStatus: "VacantLand",
+  },
+};
+
+/** @type {Map<string, PropertyUseMappingDetail>} */
+const NORMALIZED_PROPERTY_USE_LOOKUP = new Map();
+for (const detail of Object.values(PROPERTY_USE_MAPPINGS)) {
+  /** @type {PropertyUseMappingDetail} */
+  const mappingDetail = detail;
+  for (const descriptor of mappingDetail.descriptors) {
+    const normalizedDescriptor = normalizePropertyUseLabel(descriptor);
+    if (
+      normalizedDescriptor !== "" &&
+      !NORMALIZED_PROPERTY_USE_LOOKUP.has(normalizedDescriptor)
+    ) {
+      NORMALIZED_PROPERTY_USE_LOOKUP.set(normalizedDescriptor, mappingDetail);
+    }
+  }
+}
+
+/**
+ * @param {string|null|undefined} rawUse
+ * @returns {PropertyUseMappingDetail|null}
+ */
+function mapPropertyUseToLexicon(rawUse) {
+  if (!rawUse) return null;
+  const codeMatch = rawUse.match(/(\d{4})/);
+  if (codeMatch) {
+    const mappingByCode = PROPERTY_USE_MAPPINGS[codeMatch[1]];
+    if (mappingByCode) return mappingByCode;
+  }
+  const normalizedUse = normalizePropertyUseLabel(rawUse);
+  if (normalizedUse) {
+    const direct = NORMALIZED_PROPERTY_USE_LOOKUP.get(normalizedUse);
+    if (direct) return direct;
+    for (const [descriptorKey, detail] of NORMALIZED_PROPERTY_USE_LOOKUP.entries()) {
+      if (
+        normalizedUse.includes(descriptorKey) ||
+        descriptorKey.includes(normalizedUse)
+      ) {
+        return detail;
+      }
+    }
+  }
+  return null;
+}
+
 function main() {
   const dataDir = path.join("data");
   ensureDir(dataDir);
@@ -172,7 +1648,7 @@ function main() {
   ).replace(/[^0-9]/g, "");
 
   // Address components: prefer unnormalized_address.full_address
-  const fullAddr = unAddr.full_address || extractTopValue("Physical Address:");
+  const fullAddr = extractTopValue("Physical Address:");
   let street_number = null,
     street_name = null,
     street_suffix_type = null,
@@ -184,7 +1660,7 @@ function main() {
     street_post_directional_text = null;
 
   function parseStreetBodyForComponents(streetBody) {
-    if (!streetBody) return { streetName: null, suffix: null, preDir: null, postDir: null };
+    if (!streetBody) return { streetName: null, suffix: null, preDir: null, postDir: null , unit_identifier: null};
     const DIRS = new Set(["E", "N", "NE", "NW", "S", "SE", "SW", "W"]);
     const suffixMap = {
       DR: "Dr",
@@ -433,8 +1909,27 @@ function main() {
       .filter(Boolean);
 
     if (tokens.length === 0) {
-      return { streetName: null, suffix: null, preDir: null, postDir: null };
+      return { streetName: null, suffix: null, preDir: null, postDir: null, unit_identifier: null };
     }
+
+
+    let unit_identifier = null;
+
+    if (
+      tokens.length > 0 &&
+      /^[A-Z0-9\-]+$/i.test(tokens[tokens.length - 1]) &&
+      !DIRS.has(tokens[tokens.length - 1].toUpperCase())
+    ) {
+      const lastTok = tokens[tokens.length - 1];
+      const mappedSuffix =
+        suffixMap[lastTok.toUpperCase()] ||
+        (lastTok ? lastTok[0].toUpperCase() + lastTok.slice(1).toLowerCase() : null);
+
+      if (!allowedSuffix.has(mappedSuffix)) {
+        unit_identifier = tokens.pop();
+      }
+    }
+
 
     let preDir = null;
     let postDir = null;
@@ -468,8 +1963,18 @@ function main() {
       }
     }
 
-    const streetName = tokens.join(" ").trim() || null;
-    return { streetName, suffix, preDir, postDir };
+    // Remove directional tokens that are not at the start or end
+    const filteredTokens = tokens.filter((tok, idx) => {
+      const upperTok = tok.toUpperCase();
+      const isDir = DIRS.has(upperTok);
+      const isEdge = idx === 0 || idx === tokens.length - 1;
+      return !(isDir && !isEdge);
+    });
+    
+
+
+    const streetName = filteredTokens.join(" ").trim() || null;
+    return { streetName, suffix, preDir, postDir , unit_identifier};
   }
 
   if (fullAddr) {
@@ -484,6 +1989,7 @@ function main() {
       street_name = parsed.streetName || null;
       street_pre_directional_text = parsed.preDir || null;
       street_post_directional_text = parsed.postDir || null;
+      unit_identifier = parsed.unit_identifier || null;
       city_name = m[3].trim();
       state_code = m[4];
       postal_code = m[5];
@@ -585,38 +2091,42 @@ function main() {
   // Legal Description
   const legalDesc = extractLegalDescription($);
 
-  // Property Use mapping -> property_type
+  // Property Use mapping -> lexicon fields
   const propUse = extractTopValue("Property Use:");
-  function mapPropertyTypeFromUse(use) {
-    if (!use) return null;
-    const u = use.toUpperCase();
-    if (u.includes("0100") || u.includes("SINGLE FAMILY"))
-      return "SingleFamily";
-    if (u.includes("0200")) return "MobileHome";
-    if (u.includes("0400")) return "Condominium";
-    return null;
-  }
-  const property_type = mapPropertyTypeFromUse(propUse);
-  if (property_type == null) {
-    const err = {
-      type: "error",
-      message: `Unknown enum value ${propUse}.`,
-      path: "property.property_type",
-    };
-    throw new Error(JSON.stringify(err));
-  }
+  const propertyUseMapping = mapPropertyUseToLexicon(propUse);
+  const property_type = propertyUseMapping?.propertyType ?? null;
+  const property_usage_type =
+    propertyUseMapping?.propertyUsageType ?? null;
+  const ownership_estate_type =
+    propertyUseMapping?.ownershipEstateType ?? null;
+  const structure_form = propertyUseMapping?.structureForm ?? null;
+  const build_status = propertyUseMapping?.buildStatus ?? null;
 
+  function handleSFLA(sfla) {
+    if (sfla == 0 || sfla == '0' || !sfla) {
+      return null;
+    }
+    if (sfla < 10) {
+      return `0${sfla} SF`;
+    }
+    return `${sfla} SF`;
+  }
+  const fixed_sfla = handleSFLA(sfla);
   // Build property.json
   const property = {
-    area_under_air: sfla ? `${sfla} SF` : null,
-    livable_floor_area: sfla ? `${sfla} SF` : null,
+    area_under_air: fixed_sfla || null,
+    livable_floor_area: fixed_sfla || null,
     number_of_units: 1,
     number_of_units_type: "One",
     parcel_identifier: parcelId,
     property_effective_built_year: null,
     property_legal_description_text: legalDesc || null,
     property_structure_built_year: yearBuilt || null,
-    property_type: property_type,
+    build_status: build_status,
+    ownership_estate_type: ownership_estate_type,
+    property_type: property_type || null,
+    property_usage_type: property_usage_type,
+    structure_form: structure_form,
     subdivision: subdivisionName || null,
     total_area: totalArea ? `${totalArea} SF` : null,
     zoning: null,
@@ -645,7 +2155,7 @@ function main() {
     street_pre_directional_text: street_pre_directional_text || null,
     street_suffix_type: street_suffix_type || null,
     township: trs.township || null,
-    unit_identifier: null,
+    unit_identifier: unit_identifier || null,
   };
   writeJSON(path.join(dataDir, "address.json"), address);
 
@@ -771,9 +2281,30 @@ function main() {
   function mapDeedType(raw) {
     if (!raw) return null;
     const r = raw.toUpperCase();
+    if (r.includes("SPECIAL WARRANTY")) return "Special Warranty Deed";
     if (r.includes("WARRANTY DEED")) return "Warranty Deed";
     if (r.includes("QUIT")) return "Quitclaim Deed";
     if (r.includes("GRANT DEED")) return "Grant Deed";
+    if (r.includes("BARGAIN") && r.includes("SALE")) return "Bargain and Sale Deed";
+    if (r.includes("LADY BIRD")) return "Lady Bird Deed";
+    if (r.includes("TRANSFER ON DEATH")) return "Transfer on Death Deed";
+    if (r.includes("SHERIFF")) return "Sheriff's Deed";
+    if (r.includes("TAX DEED")) return "Tax Deed";
+    if (r.includes("TRUSTEE")) return "Trustee's Deed";
+    if (r.includes("PERSONAL REPRESENTATIVE")) return "Personal Representative Deed";
+    if (r.includes("CORRECTION")) return "Correction Deed";
+    if (r.includes("DEED IN LIEU")) return "Deed in Lieu of Foreclosure";
+    if (r.includes("LIFE ESTATE")) return "Life Estate Deed";
+    if (r.includes("JOINT TENANCY")) return "Joint Tenancy Deed";
+    if (r.includes("TENANCY IN COMMON")) return "Tenancy in Common Deed";
+    if (r.includes("COMMUNITY PROPERTY")) return "Community Property Deed";
+    if (r.includes("GIFT DEED")) return "Gift Deed";
+    if (r.includes("INTERSPOUSAL")) return "Interspousal Transfer Deed";
+    if (r.includes("WILD DEED")) return "Wild Deed";
+    if (r.includes("SPECIAL MASTER")) return "Special Master’s Deed";
+    if (r.includes("COURT ORDER")) return "Court Order Deed";
+    if (r.includes("CONTRACT FOR DEED")) return "Contract for Deed";
+    if (r.includes("QUIET TITLE")) return "Quiet Title Deed";
     return null;
   }
 
@@ -786,14 +2317,6 @@ function main() {
     writeJSON(path.join(dataDir, `sales_${i}.json`), sale);
 
     const deedTypeMapped = mapDeedType(row.deedType);
-    if (deedTypeMapped == null && row.deedType) {
-      const err = {
-        type: "error",
-        message: `Unknown enum value ${row.deedType}.`,
-        path: "deed.deed_type",
-      };
-      throw new Error(JSON.stringify(err));
-    }
     const deed = {};
     if (deedTypeMapped) deed.deed_type = deedTypeMapped;
     writeJSON(path.join(dataDir, `deed_${i}.json`), deed);
@@ -958,8 +2481,14 @@ function main() {
     Array.isArray(ownerObj.owners_by_date.current)
   ) {
     const currentOwners = ownerObj.owners_by_date.current;
-    currentOwners.forEach((o, idx) => {
+    const name_regex = /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/;
+    // currentOwners.forEach((o, idx) => {
+    for (let idx = 0; idx < currentOwners.length; idx++) {
+      const o = currentOwners[idx];
       if (o.type === "person") {
+        if (!name_regex.test(o.first_name) || !name_regex.test(o.last_name) || !name_regex.test(o.middle_name)) {
+          continue
+        }
         const person = {
           birth_date: null,
           first_name: o.first_name || null,
@@ -970,12 +2499,13 @@ function main() {
           us_citizenship_status: null,
           veteran_status: null,
         };
+
         writeJSON(path.join(dataDir, `person_${idx + 1}.json`), person);
       } else if (o.type === "company") {
         const company = { name: o.name || null };
         writeJSON(path.join(dataDir, `company_${idx + 1}.json`), company);
       }
-    });
+    };
     // Link current owner to the most recent sale
     if (
       currentOwners.length > 0 &&
