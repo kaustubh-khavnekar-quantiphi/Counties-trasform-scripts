@@ -1,1755 +1,1509 @@
-// Data extractor script
-// Reads input.html, unnormalized_address.json, property_seed.json and owners JSON sources.
-// Writes outputs to ./data
-
+#!/usr/bin/env node
 const fs = require("fs");
+const fsp = require("fs/promises");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function ensureDir(p) {
-  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+async function readJson(p) {
+  const s = await fsp.readFile(p, "utf8");
+  return JSON.parse(s);
 }
 
-function readJSON(p) {
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+function ensureDirSync(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function readText(p) {
-  return fs.readFileSync(p, "utf8");
+function textClean(s) {
+  return (s || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function writeJSON(p, obj) {
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2));
+function parseCurrencyToNumber(str) {
+  if (str == null) return null;
+  const s = String(str).replace(/[^0-9.\-]/g, "");
+  if (!s) return null;
+  const n = Number(s);
+  if (!isFinite(n)) return null;
+  return n;
 }
 
-function parseCurrency(val) {
-  if (val == null) return null;
-  if (typeof val === "number") return val;
-  const s = String(val).replace(/[$,\s]/g, "");
-  if (s === "" || s.toUpperCase() === "N/A") return null;
-  const n = Number.parseFloat(s);
-  if (Number.isNaN(n)) return null;
-  // Round to 2 decimals
-  return Math.round(n * 100) / 100;
+function parseDateToISO(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function toISODate(mdY) {
-  if (!mdY) return null;
-  // expect MM/DD/YYYY
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(mdY.trim());
+function detectMultiRequest(inputObj) {
+  if (!inputObj || typeof inputObj !== "object") return false;
+  const keys = Object.keys(inputObj);
+  if (keys.length === 0) return false;
+  return keys.some(
+    (k) =>
+      inputObj[k] &&
+      typeof inputObj[k] === "object" &&
+      inputObj[k].source_http_request &&
+      inputObj[k].response,
+  );
+}
+
+function getFileFormatFromUrl(u) {
+  if (!u) return null;
+  const m = u.toLowerCase().match(/\.([a-z0-9]+)(?:\?.*)?$/);
   if (!m) return null;
-  const mm = m[1].padStart(2, "0");
-  const dd = m[2].padStart(2, "0");
-  const yyyy = m[3];
-  return `${yyyy}-${mm}-${dd}`;
+  const ext = m[1];
+  if (ext === "jpg" || ext === "jpeg") return "jpeg";
+  if (ext === "png") return "png";
+  return null; // pdf or other => null per schema enum
 }
 
-function titleCaseName(s) {
-  if (!s) return s;
-  return s
-    .toLowerCase()
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function extractTextAfterColonRow($, tableIdOrTitle, rowHeading) {
-  // Find row with DataletSideHeading == rowHeading and return next cell text
-  let val = null;
-  $(`#${CSSescape(tableIdOrTitle)} tr`).each((i, tr) => {
-    const $tds = $(tr).find("td");
-    if ($tds.length >= 2) {
-      const head = $tds.eq(0).text().trim();
-      if (head === rowHeading) {
-        val = $tds.eq(1).text().trim();
-        return false;
-      }
-    }
-  });
-  return val;
-}
-
-function CSSescape(id) {
-  // basic escape for id with special chars
-  return String(id).replace(/([ #;?%&,.+*~\':\"!^$\[\]()=>|\/@])/g, "\\$1");
-}
-
-function raiseEnumError(value, pathStr) {
-  const errObj = {
-    type: "error",
-    message: `Unknown enum value ${value}.`,
-    path: pathStr,
-  };
-  console.error(JSON.stringify(errObj));
-  process.exit(1);
+async function removeExisting(pattern) {
+  try {
+    const files = await fsp.readdir("data");
+    const targets = files.filter((f) => pattern.test(f));
+    await Promise.all(
+      targets.map((f) => fsp.unlink(path.join("data", f)).catch(() => {})),
+    );
+  } catch {}
 }
 
 const propertyTypeMapping = [
   {
-    citrus_property_type: "0000: VACANT",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Residential",
-    property_type: "VacantLand",
-  },
-  {
-    citrus_property_type: "0100: SINGLE FAMILY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "SingleFamilyDetached",
-    property_usage_type: "Residential",
-    property_type: "SingleFamily",
-  },
-  {
-    citrus_property_type: "0200: MOBILE HOME",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "MobileHome",
-    property_usage_type: "Residential",
-    property_type: "MobileHome",
-  },
-  {
-    citrus_property_type: "0300: MULTIFAMILY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "MultiFamily5Plus",
-    property_usage_type: "Residential",
-    property_type: "MultipleFamily",
-  },
-  {
-    citrus_property_type: "0400: CONDOMINIUM",
-    ownership_estate_type: "Condominium",
-    build_status: "Improved",
-    structure_form: "ApartmentUnit",
-    property_usage_type: "Residential",
-    property_type: "Condominium",
-  },
-  {
-    citrus_property_type: "0410: TOWNHOUSE/VILLA",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "TownhouseRowhouse",
-    property_usage_type: "Residential",
-    property_type: "Townhouse",
-  },
-  {
-    citrus_property_type: "0420: TIMESHARE",
-    ownership_estate_type: "Timeshare",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Recreational",
-    property_type: "Timeshare",
-  },
-  {
-    citrus_property_type: "0430: ZERO LOT LINE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "SingleFamilyDetached",
-    property_usage_type: "Residential",
-    property_type: "SingleFamily",
-  },
-  {
-    citrus_property_type: "0500: MHT COOP",
-    ownership_estate_type: "Cooperative",
-    build_status: "Improved",
-    structure_form: "ManufacturedHomeInPark",
-    property_usage_type: "Residential",
-    property_type: "Cooperative",
-  },
-  {
-    citrus_property_type: "0510: COOPERATIVE",
-    ownership_estate_type: "Cooperative",
-    build_status: "Improved",
-    structure_form: "ApartmentUnit",
-    property_usage_type: "Residential",
-    property_type: "Cooperative",
-  },
-  {
-    citrus_property_type: "0600: RETIREMENT",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Retirement",
-    property_type: "Retirement",
-  },
-  {
-    citrus_property_type: "0620: LIFE CARE HX",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Retirement",
-    property_type: "Retirement",
-  },
-  {
-    citrus_property_type: "0700: MISC. RESIDENCE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Residential",
-    property_type: "MiscellaneousResidential",
+    "st_lucie_property_type": "0000 - Vac Residential",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "st_lucie_property_type": "0004 - Vac Res-Cond",
+    "ownership_estate_type": "Condominium",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "st_lucie_property_type": "0005 - Vac Res Coop",
+    "ownership_estate_type": "Cooperative",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "st_lucie_property_type": "0100 - Single Family",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "st_lucie_property_type": "0101 - SingleFam TH (Townhouse)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "TownhouseRowhouse",
+    "property_usage_type": "Residential",
+    "property_type": "Townhouse"
+  },
+  {
+    "st_lucie_property_type": "0105 - SingFam-Coop",
+    "ownership_estate_type": "Cooperative",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "Cooperative"
+  },
+  {
+    "st_lucie_property_type": "0200 - Mobile Homes",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MobileHome",
+    "property_usage_type": "Residential",
+    "property_type": "MobileHome"
+  },
+  {
+    "st_lucie_property_type": "0205 - MobHome-Coop",
+    "ownership_estate_type": "Cooperative",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "Residential",
+    "property_type": "Cooperative"
+  },
+  {
+    "st_lucie_property_type": "0300 - M-F >= 10U (Multi-Family >= 10 Units)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamily5Plus",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "st_lucie_property_type": "0400 - Condo",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": "ApartmentUnit",
+    "property_usage_type": "Residential",
+    "property_type": "Condominium"
+  },
+  {
+    "st_lucie_property_type": "0425 - Time Share",
+    "ownership_estate_type": "Timeshare",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Timeshare"
+  },
+  {
+    "st_lucie_property_type": "0500 - Cooperatives",
+    "ownership_estate_type": "Cooperative",
+    "build_status": "Improved",
+    "structure_form": "ApartmentUnit",
+    "property_usage_type": "Residential",
+    "property_type": "Cooperative"
+  },
+  {
+    "st_lucie_property_type": "0700 - Misc Res (Miscellaneous Residential)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "MiscellaneousResidential"
   },
   {
-    citrus_property_type: "0800: MFR <10 UNITS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: "MultiFamilyLessThan10",
-    property_usage_type: "Residential",
-    property_type: "MultiFamilyLessThan10",
+    "st_lucie_property_type": "0800 - M-F < 10U (Multi-Family < 10 Units)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
   },
   {
-    citrus_property_type: "0900: INTERVAL OWNER",
-    ownership_estate_type: "Timeshare",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Recreational",
-    property_type: "Timeshare",
+    "st_lucie_property_type": "0900 - ResCommonElemnt (Residential Common Element)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
   },
   {
-    citrus_property_type: "1000: VACANT COMM",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Commercial",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "1000 - Vac Comm (Vacant Commercial)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "1100: STORES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "RetailStore",
-    property_type: "Building",
+    "st_lucie_property_type": "1004 - Vac Com Cond (Vacant Commercial Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "1200: STORE/OFF/RES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Commercial",
-    property_type: "Building",
+    "st_lucie_property_type": "1009 - Vac Comm (Vacant Commercial - duplicate entry, possibly a typo or specific sub-category)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "1300: DEPT STORE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "DepartmentStore",
-    property_type: "Building",
+    "st_lucie_property_type": "1100 - STOR-1STR (Store - 1 Story)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "1400: SPRMKT/DRUG STR",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Supermarket",
-    property_type: "Building",
+    "st_lucie_property_type": "1104 - Store Condo",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "1500: SH CTR REGIONAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "ShoppingCenterRegional",
-    property_type: "Building",
+    "st_lucie_property_type": "1200 - MX-STR OFCE (Mixed Store/Office)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "1600: SH CTR CMMITY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "ShoppingCenterCommunity",
-    property_type: "Building",
+    "st_lucie_property_type": "1300 - DEPT STORE (Department Store)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "DepartmentStore",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "1700: OFFICE 1 STORY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "OfficeBuilding",
-    property_type: "Building",
+    "st_lucie_property_type": "1304 - DeptSt_Condo (Department Store Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "DepartmentStore",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "1800: OFF MULTISTORY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "OfficeBuilding",
-    property_type: "Building",
+    "st_lucie_property_type": "1400 - SUPMARKET (Supermarket)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Supermarket",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "1900: PROF OFFICES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "OfficeBuilding",
-    property_type: "Building",
+    "st_lucie_property_type": "1600 - COM SHOP CNT (Community Shopping Center)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ShoppingCenterCommunity",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2000: AIRPORT/MARINA",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "TransportationTerminal",
-    property_type: "Building",
+    "st_lucie_property_type": "1700 - OFCE BLDG (Office Building)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2100: RESTAURANT",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Restaurant",
-    property_type: "Building",
+    "st_lucie_property_type": "1704 - OFFICE CONDO",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "2200: REST, DRIVE-IN",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Restaurant",
-    property_type: "Building",
+    "st_lucie_property_type": "1800 - OFCE BLDG (Office Building - duplicate entry, possibly a typo or specific sub-category)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2300: FINANCIAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "FinancialInstitution",
-    property_type: "Building",
+    "st_lucie_property_type": "1900 - PROF SERV (Professional Services)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2400: INSURANCE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "FinancialInstitution",
-    property_type: "Building",
+    "st_lucie_property_type": "1904 - MED CONDO (Medical Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MedicalOffice",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "2500: SERVICE SHOPS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Commercial",
-    property_type: "Building",
+    "st_lucie_property_type": "2000 - AIRPT/MARINA (Airport/Marina)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2600: SERV STATIONS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "ServiceStation",
-    property_type: "Building",
+    "st_lucie_property_type": "2100 - REST CAF (Restaurant/Cafe)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2700: AUTO SALES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "AutoSalesRepair",
-    property_type: "Building",
+    "st_lucie_property_type": "2104 - REST CONDO (Restaurant Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "2800: PKG LT / MH PK",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "MobileHomePark",
-    property_type: "LandParcel",
+    "st_lucie_property_type": "2200 - DRV IN REST (Drive-In Restaurant)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "2900: WHOLESALER",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "WholesaleOutlet",
-    property_type: "Building",
+    "st_lucie_property_type": "2204 - DRV IN Condo (Drive-In Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "3000: FLORIST",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Ornamentals",
-    property_type: "Building",
+    "st_lucie_property_type": "2300 - FIN INST (Financial Institution)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "FinancialInstitution",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3100: DRV-IN THEATER",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Theater",
-    property_type: "Building",
+    "st_lucie_property_type": "2500 - RPR SRVC SHO (Repair Service Shop)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3200: THTR/AUD/CLBHS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Theater",
-    property_type: "Building",
+    "st_lucie_property_type": "2502 - Dry Cleaner/Laundromat",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3300: NIGHT CLUBS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Entertainment",
-    property_type: "Building",
+    "st_lucie_property_type": "2600 - SRVC STAT (Service Station)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ServiceStation",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3400: BOWLING ALLEY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Entertainment",
-    property_type: "Building",
+    "st_lucie_property_type": "2603 - Car Wash",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3500: TOURIST ATTRAC",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Entertainment",
-    property_type: "Building",
+    "st_lucie_property_type": "2700 - AUTO SALS (Auto Sales)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3600: CAMPS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Recreational",
-    property_type: "Building",
+    "st_lucie_property_type": "2800 - PRKG/MOBILE (Parking/Mobile)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MobileHomePark",
+    "property_type": "LandParcel"
   },
   {
-    citrus_property_type: "3700: RACETRACK",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Entertainment",
-    property_type: "Building",
+    "st_lucie_property_type": "3000 - FLRT GRNHSE (Florist/Greenhouse)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NurseryGreenhouse",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3800: GOLF COURSE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GolfCourse",
-    property_type: "Building",
+    "st_lucie_property_type": "3200 - ENC THETHRS (Enclosed Theaters)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Theater",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "3900: MOTEL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Hotel",
-    property_type: "Building",
+    "st_lucie_property_type": "3300 - NgtClub Bars (Nightclub/Bars)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4000: VACANT INDUS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Industrial",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "3400 - BWLNG ALYS (Bowling Alleys)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4100: LIGHT MFG",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "LightManufacturing",
-    property_type: "Building",
+    "st_lucie_property_type": "3500 - TRST ATRCT (Tourist Attraction)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4200: HEAVY MFG",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "HeavyManufacturing",
-    property_type: "Building",
+    "st_lucie_property_type": "3800 - GLF CRSES (Golf Courses)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GolfCourse",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4300: LUMBER YD/MILL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "LumberYard",
-    property_type: "Building",
+    "st_lucie_property_type": "3900 - HTLS MTLS (Hotels/Motels)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4400: PACKING",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "PackingPlant",
-    property_type: "Building",
+    "st_lucie_property_type": "3904 - Hotel-Condo",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "4500: BOTTLER",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Cannery",
-    property_type: "Building",
+    "st_lucie_property_type": "4000 - VCNT INDUS (Vacant Industrial)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "4600: FOOD PROCESSING",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "LightManufacturing",
-    property_type: "Building",
+    "st_lucie_property_type": "4100 - LGHT MNFCT (Light Manufacturing)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LightManufacturing",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4700: MIN PROCESSING",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "MineralProcessing",
-    property_type: "Building",
+    "st_lucie_property_type": "4200 - HVY INDSTRL (Heavy Industrial)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HeavyManufacturing",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4800: WAREH/DIST TERM",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Warehouse",
-    property_type: "Building",
+    "st_lucie_property_type": "4300 - LMBR YRD (Lumber Yard)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LumberYard",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "4900: OPEN STORAGE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "OpenStorage",
-    property_type: "LandParcel",
+    "st_lucie_property_type": "4400 - PCKNG PLNTS (Packing Plants)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PackingPlant",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5000: IMPROVED AGRI",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Agricultural",
-    property_type: "Building",
+    "st_lucie_property_type": "4500 - CANRIS FRT (Canneries/Fruit)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Cannery",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5100: CROPSOIL CLASS1",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "DrylandCropland",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4600 - OTHR FOOD (Other Food Processing)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LightManufacturing",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5200: CROPSOIL CLASS2",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "CroplandClass2",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4700 - MNRAL (Mineral)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5300: CROPSOIL CLASS3",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "CroplandClass3",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4800 - WRHSNG DIST (Warehousing/Distribution)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5400: TMBR SI 90+",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4804 - INDUS CONDO (Industrial Condominium)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Unit"
   },
   {
-    citrus_property_type: "5500: TMBR SI 80-89",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4820 - INDMINIWHS (Industrial Mini-Warehouse)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "5600: TMBR SI 70-79",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "4900 - OPN STRGE (Open Storage)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
   },
   {
-    citrus_property_type: "5700: TMBR SI 60-69",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "5100 - CRPLD SL CAP (Cropland Soil Capability)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "DrylandCropland",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "5800: TMBR SI 50-59",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "5400 - TMBL STE (Timberland)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "5900: TMBR NOT CLSSFD",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TimberLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "6000 - GRZNG SLD CP (Grazing Soil Capability)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "6000: GRZGSOIL CLASS1",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "6600 - ORCHRD GRV (Orchard/Grove)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "OrchardGroves",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "6100: GRZGSOIL CLASS2",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "6700 - MISC AG TYPES (Miscellaneous Agricultural Types)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "6200: GRZGSOIL CLASS3",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "6900 - NURSERY",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NurseryGreenhouse",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6300: GRZGSOIL CLASS4",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7000 - VAC INST (Vacant Institutional)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "6400: GRZGSOIL CLASS5",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7100 - CHRCHS (Churches)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Church",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6500: GRZGSOIL CLASS6",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GrazingLand",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7200 - PRVTE SCHLS (Private Schools)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateSchool",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6600: ORCHARD GROVES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "OrchardGroves",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7300 - PRVTE HOSP (Private Hospitals)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateHospital",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6700: POUL/BEES/FISH",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Poultry",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7400 - HMS AGED (Homes for the Aged)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6800: DAIRIES/FEEDLTS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Agricultural",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7500 - Orph/Non Prf (Orphanage/Non-Profit)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NonProfitCharity",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "6900: ORN/MISC AGRI",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Ornamentals",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7502 - Rehab Living Facility",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7000: VACANT INSTIT",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "VacantLand",
+    "st_lucie_property_type": "7600 - MRTURIES (Mortuaries)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MortuaryCemetery",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7100: CHURCHES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Church",
-    property_type: "Building",
+    "st_lucie_property_type": "7700 - CLUBS",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ClubsLodges",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7200: PRV SCHL/COLL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "PrivateSchool",
-    property_type: "Building",
+    "st_lucie_property_type": "7704 - HOA Clubhous (Homeowners Association Clubhouse)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ClubsLodges",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7300: PRV HOSPITAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "PrivateHospital",
-    property_type: "Building",
+    "st_lucie_property_type": "7900 - CLTRAL ORGA (Cultural Organization)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CulturalOrganization",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7400: NURSING HOME",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "HomesForAged",
-    property_type: "Building",
+    "st_lucie_property_type": "8000 - VAC GOVT (Vacant Government)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "VacantLand"
   },
   {
-    citrus_property_type: "7500: ORPHNG/NON-PROF",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "NonProfitCharity",
-    property_type: "Building",
+    "st_lucie_property_type": "8100 - MILITARY",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Military",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7600: MORT/CEMETERY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "MortuaryCemetery",
-    property_type: "Building",
+    "st_lucie_property_type": "8200 - FRST PRKS (Forest/Parks)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
   },
   {
-    citrus_property_type: "7700: CLB/LDG/UN HALL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "ClubsLodges",
-    property_type: "Building",
+    "st_lucie_property_type": "8300 - PBL CTY SCH (Public City School)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicSchool",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7800: SANI/ REST HOME",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "SanitariumConvalescentHome",
-    property_type: "Building",
+    "st_lucie_property_type": "8400 - COLLEGES",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CulturalOrganization",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "7900: CULTURAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "CulturalOrganization",
-    property_type: "Building",
+    "st_lucie_property_type": "8500 - HOSPITAL",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicHospital",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "8000: DISTRICTS",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "LandParcel",
+    "st_lucie_property_type": "8600 - COUNTIES",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
   },
   {
-    citrus_property_type: "8100: MILITARY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Military",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8200: FOREST/PK/REC",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "ForestParkRecreation",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "8300: PUB CTY SCHOOL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "PublicSchool",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8400: COLLEGE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "CulturalOrganization",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8500: HOSPITAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "PublicHospital",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8600: CTY INC NONMUNI",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8700: STATE",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8800: FEDERAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "8900: MUNICIPAL",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "GovernmentProperty",
-    property_type: "Building",
-  },
-  {
-    citrus_property_type: "9000: LEASEHOLD INT",
-    ownership_estate_type: "Leasehold",
-    build_status: null,
-    structure_form: null,
-    property_usage_type: "Unknown",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9100: UTILITY",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Utility",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9200: MING/PET/GASLND",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "MineralProcessing",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9300: SUBSURF RIGHTS",
-    ownership_estate_type: "SubsurfaceRights",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Unknown",
-    property_type: "VacantLand",
-  },
-  {
-    citrus_property_type: "9400: R/W - BUFFER",
-    ownership_estate_type: "RightOfWay",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "Unknown",
-    property_type: "VacantLand",
-  },
-  {
-    citrus_property_type: "9500: RIVERS/LAKES",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "RiversLakes",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9600: SEWG/WASTE LAND",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "SewageDisposal",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9700: OUTDR REC/PK LD",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Recreational",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9800: CENTRALLY ASSD",
-    ownership_estate_type: "FeeSimple",
-    build_status: "Improved",
-    structure_form: null,
-    property_usage_type: "Utility",
-    property_type: "LandParcel",
-  },
-  {
-    citrus_property_type: "9900: NON AG",
-    ownership_estate_type: "FeeSimple",
-    build_status: "VacantLand",
-    structure_form: null,
-    property_usage_type: "TransitionalProperty",
-    property_type: "VacantLand",
-  },
-  {
-    citrus_property_type: "9999: EXEMPT",
-    ownership_estate_type: "FeeSimple",
-    build_status: null,
-    structure_form: null,
-    property_usage_type: "Unknown",
-    property_type: "LandParcel",
-  },
+    "st_lucie_property_type": "8700 - STATE",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "st_lucie_property_type": "8800 - FEDERAL",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "st_lucie_property_type": "8900 - Mncpal Prop (Municipal Property)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "st_lucie_property_type": "9000 - LSHLD INTER (Leasehold Interest)",
+    "ownership_estate_type": "Leasehold",
+    "build_status": null,
+    "structure_form": null,
+    "property_usage_type": "Unknown",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9100 - UTLTY (Utility)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9200 - MINING LANDS",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9300 - SBSRFCE RGHT (Subsurface Rights)",
+    "ownership_estate_type": "SubsurfaceRights",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Unknown",
+    "property_type": "VacantLand"
+  },
+  {
+    "st_lucie_property_type": "9400 - R/W ST RDS,DITCH,IRRIGTN (Right-of-Way, State Roads, Ditch, Irrigation)",
+    "ownership_estate_type": "RightOfWay",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Unknown",
+    "property_type": "VacantLand"
+  },
+  {
+    "st_lucie_property_type": "9500 - RVRS, LKS,SUBMRGED (Rivers, Lakes, Submerged)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RiversLakes",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9600 - WASTELANDS,MARSH,DUNES",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9700 - OTDR RCRTNL (Outdoor Recreational)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9800 - CNTRLY ASSED (Centrally Assessed)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "LandParcel"
+  },
+  {
+    "st_lucie_property_type": "9900 - Non-Ag ACRG (Non-Agricultural Acreage)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "VacantLand"
+  }
 ];
 
-function mapPropertyDetailsFromPcCode(pcCode) {
-  if (!pcCode) return {};
-  const mapping = propertyTypeMapping.find((m) =>
-    pcCode.toUpperCase().includes(m.citrus_property_type.split(":")[1].trim().toUpperCase())
+function mapPropertyType(stLuciePropertyType) {
+  // Extract only the number part from the st_lucie_property_type string
+  const codeMatch = stLuciePropertyType ? stLuciePropertyType.match(/^(\d{4})/) : null;
+  const code = codeMatch ? codeMatch[1] : null;
+
+  if (!code) return {}; // Return empty object if no code found
+
+  // Find mapping by matching the extracted code with the start of the mapping's st_lucie_property_type
+  const mapping = propertyTypeMapping.find(
+    (item) => item.st_lucie_property_type.startsWith(code)
   );
-
-  if (mapping) {
-    return {
-      property_type: mapping.property_type,
-      property_usage_type: mapping.property_usage_type,
-      ownership_estate_type: mapping.ownership_estate_type,
-      build_status: mapping.build_status,
-      structure_form: mapping.structure_form,
-    };
-  }
-  return {};
+  return mapping || {};
 }
 
-function mapDeedType(instr) {
-  if (!instr) return null;
-  const u = instr.toUpperCase();
-  if (u.includes("WARRANTY DEED")) return "Warranty Deed";
-  if (u.includes("QUIT") && u.includes("DEED")) return "Quitclaim Deed";
-  if (u.includes("SPECIAL") && u.includes("WARRANTY"))
-    return "Special Warranty Deed";
-  if (u.includes("BARGAIN") && u.includes("SALE"))
-    return "Bargain and Sale Deed";
-  if (u.includes("GRANT DEED")) return "Grant Deed";
-  if (u.includes("CONTRACT") || u.includes("AGREEMENT"))
-    return "Contract for Deed";
-  if (u.includes("TRUSTEE")) return "Trustee's Deed";
-  if (u.includes("TAX DEED")) return "Tax Deed";
-  if (u.includes("PERSONAL REPRESENTATIVE"))
-    return "Personal Representative Deed";
-  if (u.includes("COURT ORDER")) return "Court Order Deed";
-  if (u.includes("LADY BIRD")) return "Lady Bird Deed";
-  // same family or other non-specific types
-  if (u.includes("SAME FAMILY") || u.includes("DEED FOL"))
-    return "Miscellaneous";
-  return null;
-}
+async function main() {
+  ensureDirSync("data");
 
-function mapFileDocumentTypeFromDeedType(deedType) {
-  if (!deedType) return null;
-  switch (deedType) {
-    case "Warranty Deed":
-      return "ConveyanceDeedWarrantyDeed";
-    case "Quitclaim Deed":
-      return "ConveyanceDeedQuitClaimDeed";
-    case "Bargain and Sale Deed":
-      return "ConveyanceDeedBargainAndSaleDeed";
-    default:
-      return "ConveyanceDeed";
-  }
-}
+  const inputHtmlRaw = await fsp.readFile("input.html", "utf8");
 
-function removeFilesByPrefix(dir, prefix) {
+  let inputAsJson = null;
   try {
-    const files = fs.readdirSync(dir);
-    files.forEach((f) => {
-      if (f.startsWith(prefix) && f.endsWith(".json")) {
-        fs.unlinkSync(path.join(dir, f));
+    inputAsJson = JSON.parse(inputHtmlRaw);
+  } catch {}
+  const isMulti = detectMultiRequest(inputAsJson);
+
+  // Initialize cheerio here, before any potential usage
+  const $ = isMulti ? null : cheerio.load(inputHtmlRaw);
+
+  const addressPath = "address.json";
+  const parcelPath = "parcel.json";
+  const ownersDir = "owners";
+  const ownerDataPath = path.join(ownersDir, "owner_data.json");
+  const utilitiesDataPath = path.join(ownersDir, "utilities_data.json");
+  const layoutDataPath = path.join(ownersDir, "layout_data.json");
+  const unnormalizedAddressPath = "unnormalized_address.json";
+
+
+  const addressData = await readJson(addressPath).catch(() => null);
+  const parcelData = await readJson(parcelPath).catch(() => null);
+  const ownerData = await readJson(ownerDataPath).catch(() => null);
+  const utilitiesData = await readJson(utilitiesDataPath).catch(() => null);
+  const layoutData = await readJson(layoutDataPath).catch(() => null);
+  const unnormalizedAddressData = await readJson(unnormalizedAddressPath).catch(() => null);
+
+
+  // Address extraction
+  let siteAddress = null;
+  if (!isMulti) {
+    $("article#property-identification table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Site Address/i.test(th)) {
+        siteAddress = textClean($(tr).find("td").text());
       }
     });
-  } catch (_) {}
-}
-
-function extract() {
-  const dataDir = path.join(".", "data");
-  ensureDir(dataDir);
-
-  // Inputs
-  const inputHtml = readText("input.html");
-  const unnormalized = readJSON("unnormalized_address.json");
-  const seed = readJSON("property_seed.json");
-
-  // Owners and related JSON
-  const ownersPath = path.join("owners", "owner_data.json");
-  const utilitiesPath = path.join("owners", "utilities_data.json");
-  const layoutPath = path.join("owners", "layout_data.json");
-
-  const ownersObj = fs.existsSync(ownersPath) ? readJSON(ownersPath) : {};
-  const utilitiesObj = fs.existsSync(utilitiesPath) ? readJSON(utilitiesPath) : {};
-  const layoutsObj = fs.existsSync(layoutPath) ? readJSON(layoutPath) : {};
-
-  const $ = cheerio.load(inputHtml);
-
-  // Extract header info
-  // Parcel ID
-  let parcelIdentifier = null;
-  $("#datalet_header_row")
-    .find("td")
-    .each((i, td) => {
-      const t = $(td).text();
-      const m = /Parcel ID:\s*([^\n\r]+)/.exec(t);
-      if (m) {
-        parcelIdentifier = m[1].trim();
-      }
-    });
-  if (!parcelIdentifier && seed && seed.parcel_id)
-    parcelIdentifier = seed.parcel_id;
-
-  // Property core
-  const yearBuiltStr = extractTextAfterColonRow($, "Residential", "Year Built");
-  const totalFLA = extractTextAfterColonRow($, "Residential", "Total FLA");
-  const totalUnderRoof = extractTextAfterColonRow(
-    $,
-    "Residential",
-    "Total Under Roof",
-  );
-
-  // From PARCEL table
-  const legal = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "Short Legal",
-  );
-  const subdivision = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "Subdivision",
-  );
-  const pcCode = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "PC Code",
-  );
-
-  // Zoning from Land & Agricultural (anchor text)
-  let zoning = null;
-  $("#" + CSSescape("Land & Agricultural") + " tr").each((i, tr) => {
-    const $tds = $(tr).find("td");
-    if ($tds.length > 0) {
-      const lab = $tds.eq(9);
-      const a = lab.find("a");
-      if (a && a.text().trim()) {
-        zoning = a.text().trim();
-        return false;
-      }
-    }
-  });
-
-  // Build status from Bldg Counts
-  const bldgCounts = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "Bldg Counts",
-  );
-  let buildStatus = null;
-  if (bldgCounts) {
-    const m = /Res\s*(\d+)/i.exec(bldgCounts);
-    if (m && Number(m[1]) > 0) buildStatus = "Improved";
   }
 
-  // Property type mapping
-  const mappedPropertyDetails = mapPropertyDetailsFromPcCode(pcCode);
-  const propertyType = mappedPropertyDetails.property_type || null;
-  const propertyUsageType = mappedPropertyDetails.property_usage_type || null;
-  const ownershipEstateType = mappedPropertyDetails.ownership_estate_type || null;
-  const structureForm = mappedPropertyDetails.structure_form || null;
-  const finalBuildStatus = mappedPropertyDetails.build_status || buildStatus; // Prioritize mapped build_status
-
-  if (!propertyType) {
-    if (pcCode) {
-      raiseEnumError(pcCode, "property.property_type");
-      return;
-    }
-  }
-
-  // Function to determine number_of_units_type based on property_type
-  function getNumberOfUnitsType(propertyType) {
-    switch (propertyType) {
-      case "SingleFamily":
-      case "Condominium":
-      case "DetachedCondominium":
-      case "NonWarrantableCondo":
-      case "Townhouse":
-      case "MobileHome":
-      case "ManufacturedHousingSingleWide":
-      case "ManufacturedHousingMultiWide":
-      case "ManufacturedHousing":
-      case "Apartment":
-      case "Cooperative":
-      case "Modular":
-      case "Pud":
-      case "Timeshare":
-      case "Retirement":
-      case "MiscellaneousResidential":
-      case "ResidentialCommonElementsAreas":
-        return "One";
-      case "Duplex":
-      case "TwoUnit":
-        return "Two";
-      case "ThreeUnit":
-        return "Three";
-      case "FourUnit":
-        return "Four";
-      case "MultiFamilyLessThan10":
-      case "MultiFamilyMoreThan10":
-        return "OneToFour";
-      default:
-        return null;
-    }
-  }
-
-  const number_of_units_type_mapped = getNumberOfUnitsType(propertyType);
-
-  const property = {
-    parcel_identifier: parcelIdentifier || "",
-    property_legal_description_text: legal || null,
-    property_structure_built_year: yearBuiltStr
-      ? parseInt(yearBuiltStr.trim(), 10)
-      : null,
-    livable_floor_area: totalFLA ? totalFLA.trim() : null,
-    area_under_air: totalFLA ? totalFLA.trim() : null,
-    total_area: totalUnderRoof ? totalUnderRoof.trim() : null,
-    subdivision: subdivision || null,
-    zoning: zoning || null,
-    build_status: finalBuildStatus,
-    property_type: propertyType,
-    property_usage_type: propertyUsageType,
-    ownership_estate_type: ownershipEstateType,
-    structure_form: structureForm,
-    number_of_units: null, // This is an integer, not the enum type
-    number_of_units_type: number_of_units_type_mapped, // Added this required field
-    historic_designation: false, // Defaulting as not found in HTML
-    property_effective_built_year: yearBuiltStr
-      ? parseInt(yearBuiltStr.trim(), 10)
-      : null,
-    source_http_request: {
-      method: "GET",
-      url: seed?.source_http_request?.url || "https://www.citruspa.org/property-detail/example", // Placeholder URL
-    },
-    request_identifier: seed.request_identifier || null,
-  };
-
-  // Address: unnormalized
-  const address = {
-    source_http_request: {
-      method: "GET",
-      url: seed?.source_http_request?.url || "https://www.citruspa.org/property-detail/example", // Placeholder URL
-    },
-    request_identifier: seed.request_identifier || null,
-    county_name: seed.county_name || "Citrus",
-    latitude: seed.latitude || null,
-    longitude: seed.longitude || null
-  };
-
-  // Attempt to parse structured address from unnormalized_address.json
-  if (unnormalized && unnormalized.full_address) {
-    const full = unnormalized.full_address.trim();
-    let street_number = null,
-      pre = null,
-      street_name = null,
-      suffix = null,
-      city = null,
-      state = null,
-      zip = null,
-      plus4 = null;
-
-    // Example parsing logic (can be refined based on actual address formats)
-    const parts = full.split(",");
-    if (parts.length >= 3) {
-      const streetPart = parts[0].trim();
-      city = parts[1].trim().toUpperCase();
-      const stateZipPart = parts[2].trim();
-
-      // Extract street number, pre-directional, street name, and suffix
-      const streetMatch = streetPart.match(/^(\d+)\s+([NESW]{1,2})?\s*(.+?)\s+(?:(AVE|BLVD|CIR|CT|DR|HWY|LN|PKWY|PL|RD|RTE|ST|TER|TRL|WAY|AVENUE|BOULEVARD|CIRCLE|COURT|DRIVE|HIGHWAY|LANE|PARKWAY|PLACE|ROAD|ROUTE|STREET|TERRACE|TRAIL))?$/i);
-      if (streetMatch) {
-        street_number = streetMatch[1];
-        pre = streetMatch[2] ? streetMatch[2].toUpperCase() : null;
-        street_name = streetMatch[3].trim();
-        suffix = streetMatch[4] ? streetMatch[4].toUpperCase() : null;
-      } else {
-        // Fallback for simpler street names without directional or suffix
-        const simpleStreetMatch = streetPart.match(/^(\d+)\s+(.+)$/);
-        if (simpleStreetMatch) {
-          street_number = simpleStreetMatch[1];
-          street_name = simpleStreetMatch[2].trim();
-        }
-      }
-
-      // Extract state, zip, and plus4
-      const stateZipMatch = stateZipPart.match(/^([A-Z]{2})\s+(\d{5})(?:-(\d{4}))?$/);
-      if (stateZipMatch) {
-        state = stateZipMatch[1];
-        zip = stateZipMatch[2];
-        plus4 = stateZipMatch[3] || null;
-      }
-    }
-
-    const suffixMap = {
-      RD: "Rd", ROAD: "Rd", ST: "St", STREET: "St", AVE: "Ave", AVENUE: "Ave",
-      BLVD: "Blvd", BOULEVARD: "Blvd", DR: "Dr", DRIVE: "Dr", LN: "Ln", LANE: "Ln",
-      CT: "Ct", COURT: "Ct", TER: "Ter", TERRACE: "Ter", HWY: "Hwy", HIGHWAY: "Hwy",
-      PKWY: "Pkwy", PARKWAY: "Pkwy", PL: "Pl", PLACE: "Pl", WAY: "Way", CIR: "Cir",
-      CIRCLE: "Cir", PLZ: "Plz", TRL: "Trl", TRAIL: "Trl", RTE: "Rte", ROUTE: "Rte",
+  if (addressData) {
+    const outAddr = {
+      source_http_request: addressData.source_http_request || null,
+      request_identifier: addressData.request_identifier || null,
+      county_name: addressData.county_name || null,
+      latitude: addressData.latitude ?? null,
+      longitude: addressData.longitude ?? null,
+      unnormalized_address: null,
     };
-    const street_suffix_type = suffix
-      ? suffixMap[suffix.toUpperCase()] || null
+
+    // Prioritize siteAddress from HTML, then unnormalized_address.json
+    if (siteAddress && siteAddress.toLowerCase() !== "tbd") {
+      outAddr.unnormalized_address = siteAddress;
+    } else if (unnormalizedAddressData && unnormalizedAddressData.full_address) {
+      outAddr.unnormalized_address = unnormalizedAddressData.full_address;
+    } else {
+      outAddr.unnormalized_address = addressData.unnormalized_address || null;
+    }
+
+    await fsp.writeFile(
+      path.join("data", "address.json"),
+      JSON.stringify(outAddr, null, 2),
+    );
+  }
+
+  // Extract both parcel formats: normalized (parcel.json) and dashed (from HTML)
+  let parcelIdentifierNormalized =
+    parcelData && parcelData.parcel_identifier
+      ? parcelData.parcel_identifier
       : null;
-
-    // Extract S/T/R from HTML if available
-    let section = null,
-      township = null,
-      range = null;
-    const strTxt = $('td:contains("S/T/R")')
-      .filter((i, el) => $(el).text().trim().startsWith("S/T/R"))
-      .first()
-      .next()
-      .text()
-      .trim();
-    if (strTxt && /\d{1,2}-\d{1,2}[A-Z]-\d{1,2}/.test(strTxt)) {
-      const parts2 = strTxt.split("-");
-      section = parts2[0];
-      township = parts2[1];
-      range = parts2[2];
-    }
-
-    // Check if street_name contains directional abbreviations and adjust if necessary
-    let final_street_name = street_name ? street_name.toUpperCase() : null;
-    if (final_street_name && (/\bE\b|\bN\b|\bNE\b|\bNW\b|\bS\b|\bSE\b|\bSW\b|\bW\b/.test(final_street_name))) {
-      const streetNameParts = final_street_name.split(' ');
-      const directional = streetNameParts.find(part => ['E', 'N', 'NE', 'NW', 'S', 'SE', 'SW', 'W'].includes(part));
-      if (directional) {
-        pre = directional;
-        final_street_name = streetNameParts.filter(part => part !== directional).join(' ');
+  let parcelIdentifierDashed = null;
+  if (!isMulti) {
+    $("article#property-identification table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Parcel ID/i.test(th)) {
+        parcelIdentifierDashed = textClean($(tr).find("td").text());
       }
-    }
-
-    Object.assign(address, {
-      street_number: street_number || null,
-      street_pre_directional_text: pre || null,
-      street_name: final_street_name,
-      street_suffix_type: street_suffix_type || null,
-      street_post_directional_text: null, // Not extracted from this source
-      unit_identifier: null, // Not extracted from this source
-      city_name: city || null,
-      state_code: state || null,
-      postal_code: zip || null,
-      plus_four_postal_code: plus4 || null,
-      country_code: "US", // Assuming US for now
-      route_number: null, // Not extracted from this source
-      township: township || null,
-      range: range || null,
-      section: section || null,
-      lot: null, // Not extracted from this source
-      block: null, // Not extracted from this source
-      municipality_name: null, // Not extracted from this source
     });
   }
 
-  // Lot
-  const estSqft = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "Est. Parcel Sqft",
-  );
-  const estAcres = extractTextAfterColonRow(
-    $,
-    "Citrus County Property Appraiser, Cregg E. Dalton",
-    "Est. Parcel Acres",
-  );
-  // From Land & Agricultural: Frontage, Depth, Land Use for view
-  let frontage = null,
-    depth = null,
-    landUse = null;
-  $("#" + CSSescape("Land & Agricultural") + " tr").each((i, tr) => {
-    const $tds = $(tr).find("td");
-    if ($tds.length >= 10 && !landUse) {
-      if (
-        $tds.eq(1).attr("class") &&
-        $tds.eq(1).attr("class").includes("DataletData")
-      ) {
-        landUse = $tds.eq(1).text().trim();
-        frontage = $tds.eq(4).text().trim();
-        depth = $tds.eq(5).text().trim();
-      }
+  // Property extraction
+  let propertyOut = null;
+  if (!isMulti) {
+    // Legal description
+    let legalDescription = null;
+    const legalSectionDiv = $("article#property-identification .section-title")
+      .filter((i, el) => /Legal Description/i.test(textClean($(el).text())))
+      .first();
+    if (legalSectionDiv && legalSectionDiv.length) {
+      const p = legalSectionDiv.next(".bottom-text").find("p").first();
+      legalDescription = textClean(p.text());
     }
-  });
-  const lot = {
-    lot_type: (() => {
-      const acres = estAcres ? parseFloat(estAcres.replace(/,/g, "")) : null;
-      if (acres != null && !Number.isNaN(acres)) {
-        return acres > 0.25
-          ? "GreaterThanOneQuarterAcre"
-          : "LessThanOrEqualToOneQuarterAcre";
+
+    // Zoning
+    let zoningVal = null;
+    $("article#property-identification table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Zoning/i.test(th)) zoningVal = textClean($(tr).find("td").text());
+    });
+
+    // Land Use Code
+    let landUseCodeText = null;
+    $("article#property-identification table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Land Use Code/i.test(th))
+        landUseCodeText = textClean($(tr).find("td").text());
+    });
+
+    // Building Type from HTML (This is not directly used in the mapping, but kept for completeness if needed elsewhere)
+    let buildingType = null;
+    $("article#building-info table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Building Type/i.test(th)) {
+        buildingType = textClean($(tr).find("td").text());
       }
-      return null;
-    })(),
-    lot_length_feet: frontage
-      ? parseInt(String(frontage).replace(/[^0-9.]/g, ""), 10)
-      : null,
-    lot_width_feet: depth
-      ? parseInt(String(depth).replace(/[^0-9.]/g, ""), 10)
-      : null,
-    lot_area_sqft: estSqft
-      ? parseInt(String(estSqft).replace(/[^0-9]/g, ""), 10)
-      : null,
-    lot_size_acre: estAcres
-      ? parseFloat(String(estAcres).replace(/[^0-9.]/g, ""))
-      : null,
-    landscaping_features: null,
-    view: landUse && /RIVER FRONT/i.test(landUse) ? "Waterfront" : null,
-    fencing_type: null,
-    fence_height: null,
-    fence_length: null,
-    driveway_material: null,
-    driveway_condition: null,
-    lot_condition_issues: null,
-  };
+    });
 
-  // Structure from HTML
-  const storiesStr = extractTextAfterColonRow($, "Residential", "Stories");
-  const extWall = extractTextAfterColonRow($, "Residential", "Exterior Wall");
-  const foundation = extractTextAfterColonRow($, "Residential", "Foundation");
-  const floorSystem = extractTextAfterColonRow(
-    $,
-    "Residential",
-    "Floor System",
-  );
-  const roofFrame = extractTextAfterColonRow($, "Residential", "Roof Frame");
-  const roofCover = extractTextAfterColonRow($, "Residential", "Roof Cover");
+    const mappedPropertyDetails = mapPropertyType(landUseCodeText);
 
-  // number of buildings
-  let numBldgs = null;
-  if (bldgCounts) {
-    const m = /Res\s*(\d+)/i.exec(bldgCounts);
-    if (m) numBldgs = parseInt(m[1], 10);
+    // Number of Units
+    let numberOfUnits = null;
+    $("article#building-info table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      if (/Number of Units/i.test(th)) {
+        const v = textClean($(tr).find("td").text());
+        const n = parseInt(v.replace(/[^0-9\-]/g, ""), 10);
+        if (!isNaN(n)) numberOfUnits = n;
+      }
+    });
+
+    // Areas from Total Areas table
+    let landAcres = null;
+    let landSqft = null;
+    $(
+      "article#property-identification .area-container table.container tr",
+    ).each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      const td = textClean($(tr).find("td").text());
+      if (/Land Size \(acres\)/i.test(th)) landAcres = td || null;
+      if (/Land Size \(SF\)/i.test(th)) landSqft = td || null;
+    });
+
+    propertyOut = {
+      parcel_identifier:
+        parcelIdentifierNormalized || parcelIdentifierDashed || null,
+      property_legal_description_text: legalDescription || null,
+      property_type: mappedPropertyDetails.property_type || "LandParcel", // Default if not found
+      property_usage_type: mappedPropertyDetails.property_usage_type || null,
+      zoning: zoningVal || null,
+      number_of_units: typeof numberOfUnits === "number" ? numberOfUnits : null,
+      build_status: mappedPropertyDetails.build_status || "VacantLand",
+      area_under_air: null,
+      livable_floor_area: null,
+      total_area: null,
+      subdivision: null,
+      structure_form: mappedPropertyDetails.structure_form || null,
+      ownership_estate_type: mappedPropertyDetails.ownership_estate_type || null,
+      property_structure_built_year: null,
+      property_effective_built_year: null,
+      historic_designation: false,
+    };
+
+    await fsp.writeFile(
+      path.join("data", "property.json"),
+      JSON.stringify(propertyOut, null, 2),
+    );
+
+    // Lot data
+    const lotOut = {
+      lot_type: null,
+      lot_length_feet: null,
+      lot_width_feet: null,
+      lot_area_sqft: null,
+      landscaping_features: null,
+      view: null,
+      fencing_type: null,
+      fence_height: null,
+      fence_length: null,
+      driveway_material: null,
+      driveway_condition: null,
+      lot_condition_issues: null,
+      lot_size_acre: null,
+    };
+    if (landAcres) {
+      const n = Number(String(landAcres).replace(/[^0-9.\-]/g, ""));
+      if (isFinite(n)) lotOut.lot_size_acre = n;
+    }
+    if (landSqft) {
+      const n = Number(String(landSqft).replace(/[^0-9.\-]/g, ""));
+      if (isFinite(n)) lotOut.lot_area_sqft = Math.round(n);
+    }
+    await fsp.writeFile(
+      path.join("data", "lot.json"),
+      JSON.stringify(lotOut, null, 2),
+    );
   }
 
-  function mapExtWallMaterial(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("CONCRETE BLOCK")) return "Concrete Block";
-    if (u.includes("BRICK")) return "Brick";
-    if (u.includes("STUCCO")) return "Stucco";
-    return null;
-  }
-  function mapFoundationType(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("STEM")) return "Stem Wall";
-    if (u.includes("SLAB")) return "Slab on Grade";
-    if (u.includes("CRAWL")) return "Crawl Space";
-    return null;
-  }
-  function mapFoundationMaterial(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("CONCRETE BLOCK")) return "Concrete Block";
-    if (u.includes("POURED")) return "Poured Concrete";
-    if (u.includes("STONE")) return "Stone";
-    if (u.includes("BRICK")) return "Brick";
-    return null;
-  }
-  function mapRoofDesign(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("GABLE")) return "Gable";
-    if (u.includes("HIP")) return "Hip";
-    if (u.includes("FLAT")) return "Flat";
-    return null;
-  }
-  function mapRoofMaterialType(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("METAL")) return "Metal";
-    if (u.includes("SHINGLE")) return "Shingle";
-    if (u.includes("TILE")) return "Tile";
-    return null;
-  }
-  function mapSubfloor(txt) {
-    if (!txt) return null;
-    const u = txt.toUpperCase();
-    if (u.includes("SLAB")) return "Concrete Slab";
-    return null;
+  // Sales extraction
+  const sales = [];
+  if (!isMulti) {
+    $("article#sale-info table.table tbody tr").each((i, tr) => {
+      const tds = $(tr).find("th, td");
+      if (!tds || tds.length < 6) return;
+      const dateTxt = textClean($(tds[0]).text());
+      const deedCode = textClean($(tds[3]).text());
+      const priceTxt = textClean($(tds[5]).text());
+      const iso = parseDateToISO(dateTxt);
+      if (!iso) return;
+      const priceNum = parseCurrencyToNumber(priceTxt);
+      const sale = { ownership_transfer_date: iso };
+      if (priceNum && priceNum > 0) sale.purchase_price_amount = priceNum;
+      sale._deed_code = deedCode || null;
+      sales.push(sale);
+    });
+    for (let i = 0; i < sales.length; i++) {
+      const out = { ownership_transfer_date: sales[i].ownership_transfer_date };
+      if (sales[i].purchase_price_amount != null)
+        out.purchase_price_amount = sales[i].purchase_price_amount;
+      await fsp.writeFile(
+        path.join("data", `sales_${i + 1}.json`),
+        JSON.stringify(out, null, 2),
+      );
+    }
   }
 
-  const structure = {
-    architectural_style_type: null,
-    attachment_type: "Detached",
-    ceiling_condition: null,
-    ceiling_height_average: null,
-    ceiling_insulation_type: "Unknown",
-    ceiling_structure_material: null,
-    ceiling_surface_material: null,
-    exterior_door_installation_date: null,
-    exterior_door_material: null,
-    exterior_wall_condition: null,
-    exterior_wall_condition_primary: null,
-    exterior_wall_condition_secondary: null,
-    exterior_wall_insulation_type: "Unknown",
-    exterior_wall_insulation_type_primary: "Unknown",
-    exterior_wall_insulation_type_secondary: null,
-    exterior_wall_material_primary: mapExtWallMaterial(extWall),
-    exterior_wall_material_secondary: null,
-    finished_base_area: null,
-    finished_basement_area: null,
-    finished_upper_story_area: null,
-    flooring_condition: null,
-    flooring_material_primary: null,
-    flooring_material_secondary: null,
-    foundation_condition: null,
-    foundation_material: mapFoundationMaterial(foundation),
-    foundation_repair_date: null,
-    foundation_type: mapFoundationType(foundation),
-    foundation_waterproofing: "Unknown",
-    gutters_condition: null,
-    gutters_material: null,
-    interior_door_material: null,
-    interior_wall_condition: null,
-    interior_wall_finish_primary: null,
-    interior_wall_finish_secondary: null,
-    interior_wall_structure_material: null,
-    interior_wall_structure_material_primary: null,
-    interior_wall_structure_material_secondary: null,
-    interior_wall_surface_material_primary: null,
-    interior_wall_surface_material_secondary: null,
-    number_of_buildings: numBldgs,
-    number_of_stories: storiesStr ? parseFloat(storiesStr) : null,
-    primary_framing_material: null,
-    roof_age_years: null,
-    roof_condition: null,
-    roof_covering_material: null,
-    roof_date: null,
-    roof_design_type: mapRoofDesign(roofFrame),
-    roof_material_type: mapRoofMaterialType(roofCover),
-    roof_structure_material: null,
-    roof_underlayment_type: "Unknown",
-    secondary_framing_material: null,
-    siding_installation_date: null,
-    structural_damage_indicators: null,
-    subfloor_material: mapSubfloor(floorSystem),
-    unfinished_base_area: null,
-    unfinished_basement_area: null,
-    unfinished_upper_story_area: null,
-    window_frame_material: null,
-    window_glazing_type: null,
-    window_installation_date: null,
-    window_operation_type: null,
-    window_screen_material: null,
-  };
+  // Tax extraction: clear old and create one file per year option present
+  await removeExisting(/^tax_.*\.json$/);
+  if (!isMulti) {
+    const years = [];
+    $("article#property-values select option").each((i, opt) => {
+      const yr = parseInt(textClean($(opt).text()), 10);
+      if (!isNaN(yr)) years.push(yr);
+    });
 
-  // Utilities from owners/utilities_data.json
-  const utilityKey = `property_${seed.request_identifier}`;
-  const utilRaw = (utilitiesObj || {})[utilityKey] || {};
-  const util = {
-    cooling_system_type: utilRaw.cooling_system_type ?? null,
-    heating_system_type: utilRaw.heating_system_type ?? null,
-    public_utility_type: utilRaw.public_utility_type ?? null,
-    sewer_type: utilRaw.sewer_type ?? null,
-    water_source_type: utilRaw.water_source_type ?? null,
-    plumbing_system_type: utilRaw.plumbing_system_type ?? null,
-    plumbing_system_type_other_description:
-      utilRaw.plumbing_system_type_other_description ?? null,
-    electrical_panel_capacity: utilRaw.electrical_panel_capacity ?? null,
-    electrical_wiring_type: utilRaw.electrical_wiring_type ?? null,
-    hvac_condensing_unit_present: utilRaw.hvac_condensing_unit_present ?? null,
-    electrical_wiring_type_other_description:
-      utilRaw.electrical_wiring_type_other_description ?? null,
-    solar_panel_present: utilRaw.solar_panel_present ?? false,
-    solar_panel_type: utilRaw.solar_panel_type ?? null,
-    solar_panel_type_other_description:
-      utilRaw.solar_panel_type_other_description ?? null,
-    smart_home_features: utilRaw.smart_home_features ?? null,
-    smart_home_features_other_description:
-      utilRaw.smart_home_features_other_description ?? null,
-    hvac_unit_condition: utilRaw.hvac_unit_condition ?? null,
-    solar_inverter_visible: utilRaw.solar_inverter_visible ?? false,
-    hvac_unit_issues: utilRaw.hvac_unit_issues ?? null,
+    let buildingVal = null,
+      landVal = null,
+      justVal = null,
+      assessedVal = null,
+      taxableVal = null;
+    $("article#property-values table.container tr").each((i, tr) => {
+      const th = textClean($(tr).find("th").text());
+      const td = textClean($(tr).find("td").text());
+      const amt = parseCurrencyToNumber(td);
+      if (/^Building$/i.test(th)) buildingVal = amt;
+      if (/^Land$/i.test(th)) landVal = amt;
+      if (/^Just\/Market$/i.test(th)) justVal = amt;
+      if (/^Assessed$/i.test(th)) assessedVal = amt;
+      if (/^Taxable$/i.test(th)) taxableVal = amt;
+    });
 
-    // Optional passthroughs
-    electrical_panel_installation_date:
-      utilRaw.electrical_panel_installation_date ?? null,
-    electrical_rewire_date: utilRaw.electrical_rewire_date ?? null,
-    heating_fuel_type: utilRaw.heating_fuel_type ?? null,
-    hvac_capacity_kw: utilRaw.hvac_capacity_kw ?? null,
-    hvac_capacity_tons: utilRaw.hvac_capacity_tons ?? null,
-    hvac_equipment_component: utilRaw.hvac_equipment_component ?? null,
-    hvac_equipment_manufacturer: utilRaw.hvac_equipment_manufacturer ?? null,
-    hvac_equipment_model: utilRaw.hvac_equipment_model ?? null,
-    hvac_installation_date: utilRaw.hvac_installation_date ?? null,
-    hvac_seer_rating: utilRaw.hvac_seer_rating ?? null,
-    hvac_system_configuration: utilRaw.hvac_system_configuration ?? null,
-    plumbing_system_installation_date:
-      utilRaw.plumbing_system_installation_date ?? null,
-    sewer_connection_date: utilRaw.sewer_connection_date ?? null,
-    solar_installation_date: utilRaw.solar_installation_date ?? null,
-    solar_inverter_installation_date:
-      utilRaw.solar_inverter_installation_date ?? null,
-    solar_inverter_manufacturer: utilRaw.solar_inverter_manufacturer ?? null,
-    solar_inverter_model: utilRaw.solar_inverter_model ?? null,
-    water_connection_date: utilRaw.water_connection_date ?? null,
-    water_heater_installation_date:
-      utilRaw.water_heater_installation_date ?? null,
-    water_heater_manufacturer: utilRaw.water_heater_manufacturer ?? null,
-    water_heater_model: utilRaw.water_heater_model ?? null,
-    well_installation_date: utilRaw.well_installation_date ?? null,
-  };
-
-  // Layouts from owners/layout_data.json
-  const layoutsRaw = ((layoutsObj || {})[utilityKey] || {}).layouts || [];
-
-  // Taxes from Value History and Tax Amount
-  const taxes = [];
-  $("#" + CSSescape("Value History and Tax Amount") + " tr").each((i, tr) => {
-    const $tds = $(tr).find("td");
-    if ($tds.length >= 10 && $tds.eq(0).hasClass("DataletData")) {
-      const year = parseInt($tds.eq(0).text().trim(), 10);
-      const landV = parseCurrency($tds.eq(1).text());
-      const imprV = parseCurrency($tds.eq(2).text());
-      const justV = parseCurrency($tds.eq(3).text());
-      const assessed = parseCurrency($tds.eq(4).text());
-      const taxable = parseCurrency($tds.eq(6).text());
-      const taxEstimate = parseCurrency($tds.eq(8).text());
-      taxes.push({
-        tax_year: year,
-        property_land_amount: landV,
-        property_building_amount: imprV,
-        property_market_value_amount: justV,
-        property_assessed_value_amount: assessed,
-        property_taxable_value_amount: taxable,
+    for (const yr of years) {
+      const taxOut = {
+        tax_year: yr,
+        property_assessed_value_amount:
+          assessedVal && assessedVal > 0 ? assessedVal : null,
+        property_market_value_amount: justVal && justVal > 0 ? justVal : null,
+        property_building_amount:
+          buildingVal && buildingVal > 0 ? buildingVal : null,
+        property_land_amount: landVal && landVal > 0 ? landVal : null,
+        property_taxable_value_amount:
+          taxableVal && taxableVal > 0 ? taxableVal : null,
         monthly_tax_amount: null,
         period_end_date: null,
         period_start_date: null,
-        yearly_tax_amount: taxEstimate,
-      });
-    }
-  });
-
-  // Sales and deed/file info from Sales table
-  const sales = [];
-  const deeds = [];
-  const files = [];
-  $("#" + CSSescape("Sales") + " tr").each((i, tr) => {
-    const $tds = $(tr).find("td");
-    if ($tds.length >= 5 && $tds.eq(0).hasClass("DataletData")) {
-      const saleDate = toISODate($tds.eq(0).text().trim());
-      const price = parseCurrency($tds.eq(1).text());
-      if (saleDate && price != null) {
-        sales.push({
-          ownership_transfer_date: saleDate,
-          purchase_price_amount: price,
-        });
-      }
-      // Deed type and file
-      const bookPageAnchor = $tds.eq(2).find("a");
-      const href =
-        bookPageAnchor && bookPageAnchor.attr("href")
-          ? bookPageAnchor.attr("href")
-          : null;
-      const name =
-        bookPageAnchor && bookPageAnchor.text()
-          ? bookPageAnchor.text().trim()
-          : null;
-      const instr = $tds.eq(3).text().trim();
-      const deedType = mapDeedType(instr);
-      const deedObj = {};
-      if (deedType) deedObj.deed_type = deedType;
-      deeds.push(deedObj);
-      // File
-      const docType = mapFileDocumentTypeFromDeedType(deedType);
-      files.push({
-        document_type: docType ?? null,
-        file_format: null,
-        ipfs_url: null,
-        name: name || null,
-        original_url: href || null,
-      });
-    }
-  });
-
-  // Owners from owners/owner_data.json
-  const ownersRaw = ((ownersObj || {})[utilityKey] || {}).owners_by_date || {};
-  const currentOwners = ownersRaw.current || [];
-  const persons = currentOwners.filter((o) => o.type === "person");
-
-  // Write outputs
-  // property.json
-  writeJSON(path.join(dataDir, "property.json"), property);
-  // address.json (unnormalized)
-  writeJSON(path.join(dataDir, "address.json"), address);
-  // lot.json
-  writeJSON(path.join(dataDir, "lot.json"), lot);
-  // structure.json
-  writeJSON(path.join(dataDir, "structure.json"), structure);
-  // utility.json
-  writeJSON(path.join(dataDir, "utility.json"), util);
-  // layout_*.json
-  layoutsRaw.forEach((lay, idx) => {
-    const out = {
-      space_type: lay.space_type ?? null,
-      space_index: lay.space_index ?? idx + 1,
-      flooring_material_type: lay.flooring_material_type ?? null,
-      size_square_feet: lay.size_square_feet ?? null,
-      floor_level: lay.floor_level ?? null,
-      has_windows: lay.has_windows ?? null,
-      window_design_type: lay.window_design_type ?? null,
-      window_material_type: lay.window_material_type ?? null,
-      window_treatment_type: lay.window_treatment_type ?? null,
-      is_finished:
-        typeof lay.is_finished === "boolean" ? lay.is_finished : null,
-      furnished: lay.furnished ?? null,
-      paint_condition: lay.paint_condition ?? null,
-      flooring_wear: lay.flooring_wear ?? null,
-      clutter_level: lay.clutter_level ?? null,
-      visible_damage: lay.visible_damage ?? null,
-      countertop_material: lay.countertop_material ?? null,
-      cabinet_style: lay.cabinet_style ?? null,
-      fixture_finish_quality: lay.fixture_finish_quality ?? null,
-      design_style: lay.design_style ?? null,
-      natural_light_quality: lay.natural_light_quality ?? null,
-      decor_elements: lay.decor_elements ?? null,
-      pool_type: lay.pool_type ?? null,
-      pool_equipment: lay.pool_equipment ?? null,
-      spa_type: lay.spa_type ?? null,
-      safety_features: lay.safety_features ?? null,
-      view_type: lay.view_type ?? null,
-      lighting_features: lay.lighting_features ?? null,
-      condition_issues: lay.condition_issues ?? null,
-      is_exterior:
-        typeof lay.is_exterior === "boolean" ? lay.is_exterior : false,
-      pool_condition: lay.pool_condition ?? null,
-      pool_surface_type: lay.pool_surface_type ?? null,
-      pool_water_quality: lay.pool_water_quality ?? null,
-    };
-    writeJSON(path.join(dataDir, `layout_${idx + 1}.json`), out);
-  });
-
-  // tax files
-  taxes.forEach((t) => {
-    writeJSON(path.join(dataDir, `tax_${t.tax_year}.json`), t);
-  });
-
-  // sales files
-  sales.forEach((s, idx) => {
-    writeJSON(path.join(dataDir, `sales_${idx + 1}.json`), s);
-  });
-
-  // deed and file outputs (align with sales order)
-  deeds.forEach((d, idx) => {
-    writeJSON(path.join(dataDir, `deed_${idx + 1}.json`), d);
-  });
-  files.forEach((f, idx) => {
-    writeJSON(path.join(dataDir, `file_${idx + 1}.json`), f);
-  });
-
-  // person files
-  persons.forEach((p, idx) => {
-    const person = {
-      birth_date: null,
-      first_name: titleCaseName(p.first_name || ""),
-      last_name: titleCaseName(p.last_name || ""),
-      middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
-      prefix_name: null,
-      suffix_name: null,
-      us_citizenship_status: null,
-      veteran_status: null,
-    };
-    writeJSON(path.join(dataDir, `person_${idx + 1}.json`), person);
-  });
-
-  // Buyer relationships: only link current owners to the most recent sale (sales_1.json)
-  // First, remove any previously generated buyer relationship files to avoid unsupported links
-  removeFilesByPrefix(dataDir, "relationship_sales_person_");
-  if (persons.length > 0 && sales.length > 0) {
-    persons.forEach((_, idx) => {
-      const rel = {
-        to: { "/": `./person_${idx + 1}.json` },
-        from: { "/": `./sales_1.json` },
+        first_year_building_on_tax_roll: null,
+        first_year_on_tax_roll: null,
+        yearly_tax_amount: null,
       };
-      writeJSON(
-        path.join(dataDir, `relationship_sales_person_${idx + 1}.json`),
-        rel,
+      await fsp.writeFile(
+        path.join("data", `tax_${yr}.json`),
+        JSON.stringify(taxOut, null, 2),
       );
-    });
-  }
-
-  // relationships: deed-file and sales-deed for all entries
-  if (deeds.length > 0 && files.length > 0) {
-    const relDF = {
-      to: { "/": "./deed_1.json" },
-      from: { "/": "./file_1.json" },
-    };
-    writeJSON(path.join(dataDir, "relationship_deed_file.json"), relDF);
-    for (let i = 2; i <= Math.min(deeds.length, files.length); i++) {
-      const rel = {
-        to: { "/": `./deed_${i}.json` },
-        from: { "/": `./file_${i}.json` },
-      };
-      writeJSON(path.join(dataDir, `relationship_deed_file_${i}.json`), rel);
     }
   }
-  if (sales.length > 0 && deeds.length > 0) {
-    const relSD = {
-      to: { "/": "./sales_1.json" },
-      from: { "/": "./deed_1.json" },
+
+  // Utilities from owners/utilities_data.json (use best available key)
+  let ownerKey = null;
+  if (propertyOut) {
+    const k1 = `property_${propertyOut.parcel_identifier}`;
+    const k2 = parcelIdentifierDashed
+      ? `property_${parcelIdentifierDashed}`
+      : null;
+    if (utilitiesData) {
+      if (utilitiesData[k1]) ownerKey = k1;
+      else if (k2 && utilitiesData[k2]) ownerKey = k2;
+    }
+  }
+  if (ownerKey && utilitiesData[ownerKey]) {
+    const util = utilitiesData[ownerKey];
+    const utilityOut = {
+      cooling_system_type: util.cooling_system_type ?? null,
+      heating_system_type: util.heating_system_type ?? null,
+      public_utility_type: util.public_utility_type ?? null,
+      sewer_type: util.sewer_type ?? null,
+      water_source_type: util.water_source_type ?? null,
+      plumbing_system_type: util.plumbing_system_type ?? null,
+      plumbing_system_type_other_description:
+        util.plumbing_system_type_other_description ?? null,
+      electrical_panel_capacity: util.electrical_panel_capacity ?? null,
+      electrical_wiring_type: util.electrical_wiring_type ?? null,
+      hvac_condensing_unit_present: util.hvac_condensing_unit_present ?? null,
+      electrical_wiring_type_other_description:
+        util.electrical_wiring_type_other_description ?? null,
+      solar_panel_present: util.solar_panel_present === true,
+      solar_panel_type: util.solar_panel_type ?? null,
+      solar_panel_type_other_description:
+        util.solar_panel_type_other_description ?? null,
+      smart_home_features: util.smart_home_features ?? null,
+      smart_home_features_other_description:
+        util.smart_home_features_other_description ?? null,
+      hvac_unit_condition: util.hvac_unit_condition ?? null,
+      solar_inverter_visible: util.solar_inverter_visible === true,
+      hvac_unit_issues: util.hvac_unit_issues ?? null,
+      electrical_panel_installation_date:
+        util.electrical_panel_installation_date ?? null,
+      electrical_rewire_date: util.electrical_rewire_date ?? null,
+      hvac_equipment_component: util.hvac_equipment_component ?? null,
+      hvac_equipment_manufacturer: util.hvac_equipment_manufacturer ?? null,
+      hvac_equipment_model: util.hvac_equipment_model ?? null,
+      hvac_installation_date: util.hvac_installation_date ?? null,
+      hvac_capacity_kw: util.hvac_capacity_kw ?? null,
+      hvac_capacity_tons: util.hvac_capacity_tons ?? null,
+      hvac_system_configuration: util.hvac_system_configuration ?? null,
+      hvac_seer_rating: util.hvac_seer_rating ?? null,
+      plumbing_fixture_count: util.plumbing_fixture_count ?? null,
+      plumbing_fixture_quality: util.plumbing_fixture_quality ?? null,
+      plumbing_fixture_type_primary: util.plumbing_fixture_type_primary ?? null,
+      plumbing_system_installation_date:
+        util.plumbing_system_installation_date ?? null,
+      sewer_connection_date: util.sewer_connection_date ?? null,
+      solar_installation_date: util.solar_installation_date ?? null,
+      solar_inverter_installation_date:
+        util.solar_inverter_installation_date ?? null,
+      solar_inverter_manufacturer: util.solar_inverter_manufacturer ?? null,
+      solar_inverter_model: util.solar_inverter_model ?? null,
+      water_connection_date: util.water_connection_date ?? null,
+      water_heater_installation_date:
+        util.water_heater_installation_date ?? null,
+      water_heater_manufacturer: util.water_heater_manufacturer ?? null,
+      water_heater_model: util.water_heater_model ?? null,
+      well_installation_date: util.well_installation_date ?? null,
     };
-    writeJSON(path.join(dataDir, "relationship_sales_deed.json"), relSD);
-    for (let i = 2; i <= Math.min(sales.length, deeds.length); i++) {
-      const rel = {
-        to: { "/": `./sales_${i}.json` },
-        from: { "/": `./deed_${i}.json` },
+    await fsp.writeFile(
+      path.join("data", "utility.json"),
+      JSON.stringify(utilityOut, null, 2),
+    );
+  }
+
+  // Layouts from owners/layout_data.json
+  if (layoutData && propertyOut) {
+    let layoutKey = null;
+    const k1 = `property_${propertyOut.parcel_identifier}`;
+    const k2 = parcelIdentifierDashed
+      ? `property_${parcelIdentifierDashed}`
+      : null;
+    if (layoutData[k1]) layoutKey = k1;
+    else if (k2 && layoutData[k2]) layoutKey = k2;
+    if (layoutKey) {
+      const layoutsWrap = layoutData[layoutKey];
+      if (layoutsWrap && Array.isArray(layoutsWrap.layouts)) {
+        await removeExisting(/^layout_.*\.json$/);
+        for (let i = 0; i < layoutsWrap.layouts.length; i++) {
+          const lay = layoutsWrap.layouts[i];
+          await fsp.writeFile(
+            path.join("data", `layout_${i + 1}.json`),
+            JSON.stringify(lay, null, 2),
+          );
+        }
+      }
+    }
+  }
+
+  // Structure minimal skeleton
+  if (!isMulti) {
+    let numberOfBuildings = null;
+    const seqText = textClean(
+      $("article#building-info .building-sequence").text(),
+    );
+    const m = seqText.match(/\((\d+) of (\d+)\)/i);
+    if (m) {
+      const total = parseInt(m[2], 10);
+      if (!isNaN(total)) numberOfBuildings = total;
+    }
+
+    const structureOut = {
+      architectural_style_type: null,
+      attachment_type: null,
+      exterior_wall_material_primary: null,
+      exterior_wall_material_secondary: null,
+      exterior_wall_condition: null,
+      exterior_wall_insulation_type: null,
+      flooring_material_primary: null,
+      flooring_material_secondary: null,
+      subfloor_material: null,
+      flooring_condition: null,
+      interior_wall_structure_material: null,
+      interior_wall_surface_material_primary: null,
+      interior_wall_surface_material_secondary: null,
+      interior_wall_finish_primary: null,
+      interior_wall_finish_secondary: null,
+      interior_wall_condition: null,
+      roof_covering_material: null,
+      roof_underlayment_type: null,
+      roof_structure_material: null,
+      roof_design_type: null,
+      roof_condition: null,
+      roof_age_years: null,
+      gutters_material: null,
+      gutters_condition: null,
+      roof_material_type: null,
+      foundation_type: null,
+      foundation_material: null,
+      foundation_waterproofing: null,
+      foundation_condition: null,
+      ceiling_structure_material: null,
+      ceiling_surface_material: null,
+      ceiling_insulation_type: null,
+      ceiling_height_average: null,
+      ceiling_condition: null,
+      exterior_door_material: null,
+      interior_door_material: null,
+      window_frame_material: null,
+      window_glazing_type: null,
+      window_operation_type: null,
+      window_screen_material: null,
+      primary_framing_material: null,
+      secondary_framing_material: null,
+      structural_damage_indicators: null,
+      number_of_buildings: numberOfBuildings,
+      number_of_stories: null,
+      finished_base_area: null,
+      finished_basement_area: null,
+      finished_upper_story_area: null,
+      unfinished_base_area: null,
+      unfinished_basement_area: null,
+      unfinished_upper_story_area: null,
+      roof_date: null,
+      siding_installation_date: null,
+      foundation_repair_date: null,
+      exterior_door_installation_date: null,
+      window_installation_date: null,
+    };
+
+    await fsp.writeFile(
+      path.join("data", "structure.json"),
+      JSON.stringify(structureOut, null, 2),
+    );
+  }
+
+  // Deeds from sales table deed code column
+  const deeds = [];
+  if (!isMulti && sales.length) {
+    function mapDeedCodeToType(code) {
+      const c = (code || "").toUpperCase();
+      if (c === "CV") return "Miscellaneous";
+      return null;
+    }
+    await removeExisting(/^deed_.*\.json$/);
+    for (let i = 0; i < sales.length; i++) {
+      const deedType = mapDeedCodeToType(sales[i]._deed_code);
+      const deedOut = {};
+      if (deedType) deedOut.deed_type = deedType;
+      deeds.push(deedOut);
+      await fsp.writeFile(
+        path.join("data", `deed_${i + 1}.json`),
+        JSON.stringify(deedOut, null, 2),
+      );
+    }
+  }
+
+  // Files: collect key document/media links (no deed-file relationships since these are not deed docs)
+  const fileRecords = [];
+  if (!isMulti) {
+    await removeExisting(/^file_.*\.json$/);
+    const urls = new Set();
+    $('a[href*="TrimPrint"]').each((i, a) => urls.add($(a).attr("href")));
+    $('a[href*="/downloads/mapbook/"]').each((i, a) =>
+      urls.add($(a).attr("href")),
+    );
+    $('a[href*="ImageSketches"], a[href*="imagesketches"]').each((i, a) =>
+      urls.add($(a).attr("href")),
+    );
+
+    let idx = 0;
+    for (const u of urls) {
+      idx += 1;
+      const rec = {
+        file_format: getFileFormatFromUrl(u),
+        name: path.basename(u || "") || null,
+        original_url: u || null,
+        ipfs_url: null,
+        document_type: null,
       };
-      writeJSON(path.join(dataDir, `relationship_sales_deed_${i}.json`), rel);
+      if (rec.file_format === "jpeg") rec.document_type = "PropertyImage";
+      fileRecords.push(rec);
+      await fsp.writeFile(
+        path.join("data", `file_${idx}.json`),
+        JSON.stringify(rec, null, 2),
+      );
+    }
+  }
+
+  // Owners from owner_data and relationships
+  let ownerDataKey = null;
+  if (ownerData && propertyOut) {
+    const k1 = `property_${propertyOut.parcel_identifier}`;
+    const k2 = parcelIdentifierDashed
+      ? `property_${parcelIdentifierDashed}`
+      : null;
+    if (ownerData[k1]) ownerDataKey = k1;
+    else if (k2 && ownerData[k2]) ownerDataKey = k2;
+  }
+  let personIdx = 0;
+  let companyIdx = 0;
+  if (ownerDataKey) {
+    const ownWrap = ownerData[ownerDataKey];
+    if (
+      ownWrap &&
+      ownWrap.owners_by_date &&
+      Array.isArray(ownWrap.owners_by_date.current)
+    ) {
+      const currentOwners = ownWrap.owners_by_date.current;
+      await removeExisting(/^person_.*\.json$/);
+      await removeExisting(/^company_.*\.json$/);
+      for (const o of currentOwners) {
+        if (o.type === "person") {
+          personIdx += 1;
+          const personOut = {
+            birth_date: null,
+            first_name: o.first_name || null,
+            last_name: o.last_name || null,
+            middle_name: null,
+            prefix_name: null,
+            suffix_name: null,
+            us_citizenship_status: null,
+            veteran_status: null,
+          };
+          await fsp.writeFile(
+            path.join("data", `person_${personIdx}.json`),
+            JSON.stringify(personOut, null, 2),
+          );
+        } else if (o.type === "company") {
+          companyIdx += 1;
+          const companyOut = { name: o.name || null };
+          await fsp.writeFile(
+            path.join("data", `company_${companyIdx}.json`),
+            JSON.stringify(companyOut, null, 2),
+          );
+        }
+      }
+    }
+  }
+
+  // Relationships: clean and create one per sale-owner pair (no duplicates)
+  await removeExisting(/^relationship_sales_company.*\.json$/);
+  await removeExisting(/^relationship_sales_person.*\.json$/);
+  await removeExisting(/^relationship_sales_deed.*\.json$/);
+  await removeExisting(/^relationship_deed_file.*\.json$/);
+
+  const salesFiles = await fsp
+    .readdir("data")
+    .then((arr) => arr.filter((f) => /^sales_\d+\.json$/.test(f)))
+    .catch(() => []);
+  salesFiles.sort(
+    (a, b) =>
+      parseInt(a.match(/(\d+)/)[1], 10) - parseInt(b.match(/(\d+)/)[1], 10),
+  );
+  if (salesFiles.length) {
+    for (let s = 0; s < salesFiles.length; s++) {
+      const saleIdx = parseInt(salesFiles[s].match(/(\d+)/)[1], 10);
+      for (let i = 1; i <= companyIdx; i++) {
+        const rel = {
+          to: { "/": `./company_${i}.json` },
+          from: { "/": `./${salesFiles[s]}` },
+        };
+        await fsp.writeFile(
+          path.join("data", `relationship_sales_company_${saleIdx}.json`),
+          JSON.stringify(rel, null, 2),
+        );
+      }
+      for (let i = 1; i <= personIdx; i++) {
+        const rel = {
+          to: { "/": `./person_${i}.json` },
+          from: { "/": `./${salesFiles[s]}` },
+        };
+        await fsp.writeFile(
+          path.join("data", `relationship_sales_person_${saleIdx}.json`),
+          JSON.stringify(rel, null, 2),
+        );
+      }
+    }
+  }
+
+  // relationship: sales → deed (one per pair, suffixed only)
+  if (deeds.length) {
+    for (let i = 0; i < deeds.length; i++) {
+      const rel = {
+        to: { "/": `./sales_${i + 1}.json` },
+        from: { "/": `./deed_${i + 1}.json` },
+      };
+      await fsp.writeFile(
+        path.join("data", `relationship_sales_deed_${i + 1}.json`),
+        JSON.stringify(rel, null, 2),
+      );
     }
   }
 }
 
-try {
-  extract();
-  console.log("Script executed successfully.");
-} catch (e) {
-  console.error((e && e.stack) || String(e));
+main().catch(async (err) => {
+  const errMsg = {
+    type: "error",
+    message: err && err.message ? err.message : String(err),
+    path: "scripts/data_extractor",
+  };
+  try {
+    ensureDirSync("data");
+    await fsp.writeFile(
+      path.join("data", "error.json"),
+      JSON.stringify(errMsg, null, 2),
+    );
+  } catch {}
+  console.error(err);
   process.exit(1);
-}
+});

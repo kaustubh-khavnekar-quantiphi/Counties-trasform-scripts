@@ -1,164 +1,130 @@
-// Structure mapping script
-// Reads input.html, parses with cheerio, and writes owners/structure_data.json
+// Structure Mapping Script
+// Reads input.html, parses with cheerio, and outputs owners/structure_data.json per schema
 
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function ensureDirSync(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+function loadHtml(filePath) {
+  const html = fs.readFileSync(filePath, "utf8");
+  return cheerio.load(html);
 }
 
-function textNorm(t) {
-  return (t || "").replace(/\s+/g, " ").trim();
+function getParcelId($) {
+  // Find Parcel ID within Property Identification section
+  const table = $("#property-identification table.container").first();
+  let parcelId = null;
+  table.find("tr").each((i, el) => {
+    const th = cheerio.load(el)("th").first().text().trim();
+    if (/Parcel ID/i.test(th)) {
+      const td = cheerio.load(el)("td").first();
+      const bold = td.find("b");
+      parcelId = (bold.text() || td.text() || "").trim();
+    }
+  });
+  return parcelId || "unknown";
 }
 
-function parseIntSafe(s) {
-  const n = parseInt((s || "").toString().replace(/[^0-9.-]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
+function getTextFromTableByLabel($, containerSelector, label) {
+  const container = $(containerSelector).first();
+  let found = null;
+  container.find("tr").each((i, el) => {
+    const row = cheerio.load(el);
+    const th = row("th").first().text().trim();
+    if (th.toLowerCase().includes(label.toLowerCase())) {
+      const val = row("td").first().text().trim();
+      found = val || null;
+    }
+  });
+  return found;
 }
 
-function parseFloatSafe(s) {
-  const n = parseFloat((s || "").toString().replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
-
-function getKV($, tableSelector, headingText) {
-  let val = null;
-  $(tableSelector)
-    .find("tr")
-    .each((i, tr) => {
-      const th = textNorm($(tr).find("td.DataletSideHeading").first().text());
-      if (th === headingText) {
-        val = textNorm($(tr).find("td.DataletData").first().text());
-      }
-    });
-  return val;
-}
-
-function extractPropertyId($) {
-  const hdPin = $("input#hdPin").attr("value") || $("input#hdPin").val();
-  if (hdPin) return textNorm(hdPin);
-  // Fallback: try Altkey line in header
-  let id = null;
-  $("#datalet_header_row")
-    .find("td")
-    .each((i, td) => {
-      const t = $(td).text();
-      const m = t.match(/Altkey:\s*(\d+)/i);
-      if (m) id = m[1];
-    });
-  return id || "unknown";
-}
-
-function mapExteriorWallToMaterial(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("CONCRETE BLOCK")) return "Concrete Block";
-  if (t.includes("BRICK")) return "Brick";
-  if (t.includes("STUCCO")) return "Stucco";
-  if (t.includes("VINYL")) return "Vinyl Siding";
-  if (t.includes("WOOD")) return "Wood Siding";
-  if (t.includes("FIBER CEMENT")) return "Fiber Cement Siding";
-  if (t.includes("STONE")) return "Natural Stone";
-  return null;
-}
-
-function mapFoundationType(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("STEM")) return "Stem Wall";
-  if (t.includes("SLAB")) return "Slab on Grade";
-  if (t.includes("CRAWL")) return "Crawl Space";
-  if (t.includes("BASEMENT")) return "Full Basement";
-  return null;
-}
-
-function mapFoundationMaterial(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("CONCRETE BLOCK") || t.includes("BLOCK"))
+function mapExteriorWallMaterial(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t.includes("brick")) return "Brick";
+  if (t.includes("stucco")) return "Stucco";
+  if (t.includes("vinyl")) return "Vinyl Siding";
+  if (t.includes("wood")) return "Wood Siding";
+  if (t.includes("fiber cement") || t.includes("hardie"))
+    return "Fiber Cement Siding";
+  if (t.includes("metal")) return "Metal Siding";
+  if (t.includes("block") || t.includes("cbs") || t.includes("concrete block"))
     return "Concrete Block";
-  if (t.includes("POURED CONCRETE") || t.includes("CONC"))
-    return "Poured Concrete";
-  if (t.includes("STONE")) return "Stone";
-  if (t.includes("BRICK")) return "Brick";
+  if (t.includes("stone")) return "Natural Stone";
+  if (t.includes("eifs")) return "EIFS";
+  if (t.includes("log")) return "Log";
+  if (t.includes("adobe")) return "Adobe";
+  if (t.includes("precast")) return "Precast Concrete";
+  if (t.includes("curtain")) return "Curtain Wall";
   return null;
 }
 
-function mapSubfloor(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("SLAB")) return "Concrete Slab";
-  if (t.includes("PLYWOOD")) return "Plywood";
-  if (t.includes("OSB")) return "OSB";
+function mapRoofCover(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t.includes("3-tab")) return "3-Tab Asphalt Shingle";
+  if (t.includes("architectural") || t.includes("dimensional"))
+    return "Architectural Asphalt Shingle";
+  if (t.includes("standing seam")) return "Metal Standing Seam";
+  if (t.includes("metal")) return "Metal Corrugated";
+  if (t.includes("clay")) return "Clay Tile";
+  if (t.includes("concrete tile")) return "Concrete Tile";
+  if (t.includes("slate")) return "Natural Slate";
+  if (t.includes("synthetic slate")) return "Synthetic Slate";
+  if (t.includes("shake")) return "Wood Shake";
+  if (t.includes("shingle")) return "Wood Shingle";
+  if (t.includes("tpo")) return "TPO Membrane";
+  if (t.includes("epdm")) return "EPDM Membrane";
+  if (t.includes("modified")) return "Modified Bitumen";
+  if (t.includes("built-up") || t.includes("bur")) return "Built-Up Roof";
+  if (t.includes("green roof")) return "Green Roof System";
+  if (t.includes("solar tiles")) return "Solar Integrated Tiles";
   return null;
 }
 
-function mapRoofDesign(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("GABLE")) return "Gable";
-  if (t.includes("HIP")) return "Hip";
-  if (t.includes("FLAT")) return "Flat";
-  if (t.includes("GAMBREL")) return "Gambrel";
-  if (t.includes("MANSARD")) return "Mansard";
-  if (t.includes("SHED")) return "Shed";
+function mapRoofStructure(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t.includes("truss") && t.includes("wood")) return "Wood Truss";
+  if (t.includes("truss") && t.includes("steel")) return "Steel Truss";
+  if (t.includes("rafter")) return "Wood Rafter";
+  if (t.includes("concrete")) return "Concrete Beam";
+  if (t.includes("engineered")) return "Engineered Lumber";
   return null;
 }
 
-function mapRoofMaterialTypeFromCover(text) {
-  const t = (text || "").toUpperCase();
-  if (t.includes("METAL")) return "Metal";
-  if (t.includes("SHINGLE")) return "Shingle";
-  if (t.includes("TILE")) return "Tile";
-  if (t.includes("SLATE")) return "Stone";
-  if (t.includes("CONCRETE")) return "PouredConcrete";
-  return null;
-}
+function extractStructure($) {
+  // From Building Information -> Exterior and Interior tables
+  const exteriorTableSelector =
+    "#building-info .exterior-container table.container";
+  const interiorTableSelector =
+    "#building-info .interior-container table.container";
 
-function main() {
-  const inputPath = path.join(process.cwd(), "input.html");
-  const html = fs.readFileSync(inputPath, "utf-8");
-  const $ = cheerio.load(html);
-
-  const propId = extractPropertyId($);
-
-  // Core sources
-  const residentialTable = "table#Residential";
-  const profileTable =
-    "table#Citrus\\ County\\ Property\\ Appraiser\\,\\ Cregg\\ E\\.\\ Dalton";
-
-  const exteriorWallRaw = getKV($, residentialTable, "Exterior Wall");
-  const foundationRaw = getKV($, residentialTable, "Foundation");
-  const floorSystemRaw = getKV($, residentialTable, "Floor System");
-  const roofFrameRaw = getKV($, residentialTable, "Roof Frame");
-  const roofCoverRaw = getKV($, residentialTable, "Roof Cover");
-  const storiesRaw = getKV($, residentialTable, "Stories");
-  const bldgCountsRaw = (function () {
-    let v = null;
-    $(profileTable)
-      .find("tr")
-      .each((i, tr) => {
-        const th = textNorm($(tr).find("td.DataletSideHeading").first().text());
-        if (th === "Bldg Counts")
-          v = textNorm($(tr).find("td.DataletData").first().text());
-      });
-    return v;
-  })();
-
-  // Derivations
-  const numberOfBuildings = (function () {
-    const m = (bldgCountsRaw || "").match(/Res\s+(\d+)/i);
-    return m ? parseIntSafe(m[1]) : null;
-  })();
-  const numberOfStories = parseFloatSafe(storiesRaw);
-
-  const exteriorMaterial = mapExteriorWallToMaterial(exteriorWallRaw);
-  const foundationType = mapFoundationType(foundationRaw);
-  const foundationMaterial = mapFoundationMaterial(foundationRaw);
-  const subfloor = mapSubfloor(floorSystemRaw);
-  const roofDesign = mapRoofDesign(roofFrameRaw);
-  const roofMaterialType = mapRoofMaterialTypeFromCover(roofCoverRaw);
+  const primaryWallRaw = getTextFromTableByLabel(
+    $,
+    exteriorTableSelector,
+    "Primary Wall",
+  );
+  const secondaryWallRaw = getTextFromTableByLabel(
+    $,
+    exteriorTableSelector,
+    "Secondary Wall",
+  );
+  const roofCoverRaw = getTextFromTableByLabel(
+    $,
+    exteriorTableSelector,
+    "Roof Cover",
+  );
+  const roofStructRaw = getTextFromTableByLabel(
+    $,
+    exteriorTableSelector,
+    "Roof Structure",
+  );
 
   const structure = {
     architectural_style_type: null,
-    attachment_type: "Detached",
+    attachment_type: null,
     ceiling_condition: null,
     ceiling_height_average: null,
     ceiling_insulation_type: null,
@@ -169,10 +135,10 @@ function main() {
     exterior_wall_condition: null,
     exterior_wall_condition_primary: null,
     exterior_wall_condition_secondary: null,
-    exterior_wall_insulation_type: "Unknown",
-    exterior_wall_insulation_type_primary: "Unknown",
+    exterior_wall_insulation_type: null,
+    exterior_wall_insulation_type_primary: null,
     exterior_wall_insulation_type_secondary: null,
-    exterior_wall_material_primary: exteriorMaterial,
+    exterior_wall_material_primary: mapExteriorWallMaterial(primaryWallRaw),
     exterior_wall_material_secondary: null,
     finished_base_area: null,
     finished_basement_area: null,
@@ -181,10 +147,10 @@ function main() {
     flooring_material_primary: null,
     flooring_material_secondary: null,
     foundation_condition: null,
-    foundation_material: foundationMaterial,
+    foundation_material: null,
     foundation_repair_date: null,
-    foundation_type: foundationType,
-    foundation_waterproofing: "Unknown",
+    foundation_type: null,
+    foundation_waterproofing: null,
     gutters_condition: null,
     gutters_material: null,
     interior_door_material: null,
@@ -196,22 +162,21 @@ function main() {
     interior_wall_structure_material_secondary: null,
     interior_wall_surface_material_primary: null,
     interior_wall_surface_material_secondary: null,
-    number_of_buildings: numberOfBuildings,
-    number_of_stories: numberOfStories,
-    primary_framing_material:
-      exteriorMaterial === "Concrete Block" ? "Concrete Block" : null,
+    number_of_buildings: null,
+    number_of_stories: null,
+    primary_framing_material: null,
     roof_age_years: null,
     roof_condition: null,
-    roof_covering_material: null,
+    roof_covering_material: mapRoofCover(roofCoverRaw),
     roof_date: null,
-    roof_design_type: roofDesign,
-    roof_material_type: roofMaterialType || null,
-    roof_structure_material: null,
-    roof_underlayment_type: "Unknown",
+    roof_design_type: null,
+    roof_material_type: null,
+    roof_structure_material: mapRoofStructure(roofStructRaw),
+    roof_underlayment_type: null,
     secondary_framing_material: null,
     siding_installation_date: null,
     structural_damage_indicators: null,
-    subfloor_material: subfloor,
+    subfloor_material: null,
     unfinished_base_area: null,
     unfinished_basement_area: null,
     unfinished_upper_story_area: null,
@@ -222,22 +187,37 @@ function main() {
     window_screen_material: null,
   };
 
-  // Ensure required fields exist per schema (they do) and enums respected via null defaults.
+  // number_of_buildings from '(1 of 1)'
+  const seqText = $("#building-info .building-sequence").first().text().trim();
+  const matchSeq = seqText.match(/\((\d+) of (\d+)\)/i);
+  if (matchSeq) {
+    structure.number_of_buildings = parseInt(matchSeq[2], 10) || null;
+  }
 
-  const out = {};
-  out[`property_${propId}`] = structure;
+  // Secondary wall mapping if text present
+  structure.exterior_wall_material_secondary =
+    mapExteriorWallMaterial(secondaryWallRaw);
 
-  ensureDirSync(path.join(process.cwd(), "owners"));
-  fs.writeFileSync(
-    path.join("owners", "structure_data.json"),
-    JSON.stringify(out, null, 2),
-  );
-  console.log("Wrote owners/structure_data.json for property_" + propId);
+  return structure;
 }
 
-try {
+function main() {
+  const inputPath = path.join(process.cwd(), "input.html");
+  const $ = loadHtml(inputPath);
+  const parcelId = getParcelId($);
+  const structure = extractStructure($);
+
+  const outputDir = path.join(process.cwd(), "owners");
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const output = {};
+  output[`property_${parcelId}`] = structure;
+
+  const outPath = path.join(outputDir, "structure_data.json");
+  fs.writeFileSync(outPath, JSON.stringify(output, null, 2), "utf8");
+  console.log(`Wrote structure data for property_${parcelId} to ${outPath}`);
+}
+
+if (require.main === module) {
   main();
-} catch (err) {
-  console.error("Error generating structure data:", err.message);
-  process.exit(1);
 }

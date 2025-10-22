@@ -1,85 +1,83 @@
-// Layout mapping script
-// Reads input.html, parses with cheerio, and writes owners/layout_data.json
+// Layout Mapping Script
+// Reads input.html, parses with cheerio, and outputs owners/layout_data.json per schema
 
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function ensureDirSync(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+function loadHtml(filePath) {
+  const html = fs.readFileSync(filePath, "utf8");
+  return cheerio.load(html);
 }
 
-function textNorm(t) {
-  return (t || "").replace(/\s+/g, " ").trim();
+function getParcelId($) {
+  // Find Parcel ID within Property Identification section
+  const table = $("#property-identification table.container").first();
+  let parcelId = null;
+  table.find("tr").each((i, el) => {
+    const th = cheerio.load(el)("th").first().text().trim();
+    if (/Parcel ID/i.test(th)) {
+      const td = cheerio.load(el)("td").first();
+      const bold = td.find("b");
+      parcelId = (bold.text() || td.text() || "").trim();
+    }
+  });
+  return parcelId || "unknown";
 }
 
-function parseIntSafe(s) {
-  const n = parseInt((s || "").toString().replace(/[^0-9.-]/g, ""), 10);
-  return Number.isFinite(n) ? n : null;
+function getTextFromTableByLabel($, containerSelector, label) {
+  const container = $(containerSelector).first();
+  let found = null;
+  container.find("tr").each((i, el) => {
+    const row = cheerio.load(el);
+    const th = row("th").first().text().trim();
+    if (th.toLowerCase().includes(label.toLowerCase())) {
+      const val = row("td").first().text().trim();
+      found = val || null;
+    }
+  });
+  return found;
 }
 
-function extractPropertyId($) {
-  const hdPin = $("input#hdPin").attr("value") || $("input#hdPin").val();
-  if (hdPin) return textNorm(hdPin);
-  let id = null;
-  $("#datalet_header_row")
-    .find("td")
-    .each((i, td) => {
-      const t = $(td).text();
-      const m = t.match(/Altkey:\s*(\d+)/i);
-      if (m) id = m[1];
-    });
-  return id || "unknown";
-}
-
-function getKV($, tableSelector, headingText) {
-  let val = null;
-  $(tableSelector)
-    .find("tr")
-    .each((i, tr) => {
-      const th = textNorm($(tr).find("td.DataletSideHeading").first().text());
-      if (th === headingText) {
-        val = textNorm($(tr).find("td.DataletData").first().text());
-      }
-    });
-  return val;
-}
-
-function main() {
-  const inputPath = path.join(process.cwd(), "input.html");
-  const html = fs.readFileSync(inputPath, "utf-8");
-  const $ = cheerio.load(html);
-
-  const propId = extractPropertyId($);
-
-  const residentialTable = "table#Residential";
-  const bfhRaw =
-    getKV($, residentialTable, "Bedrooms/Full Baths/Half Baths") || "";
-  // Format appears like "2/2/" meaning 2 beds, 2 full baths, 0 half baths
-  const parts = bfhRaw.split("/");
-  const beds = parseIntSafe(parts[0]) || 0;
-  const fullBaths = parseIntSafe(parts[1]) || 0;
-  const halfBaths = parseIntSafe(parts[2]) || 0;
-
-  const storiesRaw = getKV($, residentialTable, "Stories");
-  const story = textNorm(storiesRaw || "1");
-  const floorLevelLabel = story === "1" ? "1st Floor" : "2nd Floor";
-
+function extractLayouts($) {
   const layouts = [];
-  let spaceIndex = 1;
+  const interiorTableSelector =
+    "#building-info .interior-container table.container";
 
-  for (let i = 0; i < beds; i++) {
+  const bedroomCountText = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Bedrooms",
+  );
+  const fullBathCountText = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Full Baths",
+  );
+  const halfBathCountText = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Half Baths",
+  );
+
+  const bedrooms = parseInt(bedroomCountText || "0", 10) || 0;
+  const fullBaths = parseInt(fullBathCountText || "0", 10) || 0;
+  const halfBaths = parseInt(halfBathCountText || "0", 10) || 0;
+
+  let idx = 1;
+
+  for (let i = 0; i < bedrooms; i++) {
     layouts.push({
       space_type: "Bedroom",
-      space_index: spaceIndex++,
+      space_index: idx++,
       flooring_material_type: null,
       size_square_feet: null,
-      floor_level: floorLevelLabel,
+      floor_level: null,
       has_windows: null,
       window_design_type: null,
       window_material_type: null,
       window_treatment_type: null,
-      is_finished: true,
+      is_finished: false,
       furnished: null,
       paint_condition: null,
       flooring_wear: null,
@@ -108,15 +106,15 @@ function main() {
   for (let i = 0; i < fullBaths; i++) {
     layouts.push({
       space_type: "Full Bathroom",
-      space_index: spaceIndex++,
+      space_index: idx++,
       flooring_material_type: null,
       size_square_feet: null,
-      floor_level: floorLevelLabel,
+      floor_level: null,
       has_windows: null,
       window_design_type: null,
       window_material_type: null,
       window_treatment_type: null,
-      is_finished: true,
+      is_finished: false,
       furnished: null,
       paint_condition: null,
       flooring_wear: null,
@@ -145,15 +143,15 @@ function main() {
   for (let i = 0; i < halfBaths; i++) {
     layouts.push({
       space_type: "Half Bathroom / Powder Room",
-      space_index: spaceIndex++,
+      space_index: idx++,
       flooring_material_type: null,
       size_square_feet: null,
-      floor_level: floorLevelLabel,
+      floor_level: null,
       has_windows: null,
       window_design_type: null,
       window_material_type: null,
       window_treatment_type: null,
-      is_finished: true,
+      is_finished: false,
       furnished: null,
       paint_condition: null,
       flooring_wear: null,
@@ -179,20 +177,26 @@ function main() {
     });
   }
 
-  const out = {};
-  out[`property_${propId}`] = { layouts };
-
-  ensureDirSync(path.join(process.cwd(), "owners"));
-  fs.writeFileSync(
-    path.join("owners", "layout_data.json"),
-    JSON.stringify(out, null, 2),
-  );
-  console.log("Wrote owners/layout_data.json for property_" + propId);
+  return layouts;
 }
 
-try {
+function main() {
+  const inputPath = path.join(process.cwd(), "input.html");
+  const $ = loadHtml(inputPath);
+  const parcelId = getParcelId($);
+  const layouts = extractLayouts($);
+
+  const outputDir = path.join(process.cwd(), "owners");
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const output = {};
+  output[`property_${parcelId}`] = { layouts };
+
+  const outPath = path.join(outputDir, "layout_data.json");
+  fs.writeFileSync(outPath, JSON.stringify(output, null, 2), "utf8");
+  console.log(`Wrote layout data for property_${parcelId} to ${outPath}`);
+}
+
+if (require.main === module) {
   main();
-} catch (err) {
-  console.error("Error generating layout data:", err.message);
-  process.exit(1);
 }

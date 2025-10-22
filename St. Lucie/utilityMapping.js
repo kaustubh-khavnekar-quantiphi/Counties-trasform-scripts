@@ -1,119 +1,122 @@
-// Utility mapping script
-// Reads input.html, parses with cheerio, and writes owners/utilities_data.json
+// Utility Mapping Script
+// Reads input.html, parses with cheerio, and outputs owners/utilities_data.json per schema
 
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function ensureDirSync(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+function loadHtml(filePath) {
+  const html = fs.readFileSync(filePath, "utf8");
+  return cheerio.load(html);
 }
 
-function textNorm(t) {
-  return (t || "").replace(/\s+/g, " ").trim();
-}
-
-function getKV($, tableSelector, headingText) {
-  let val = null;
-  $(tableSelector)
-    .find("tr")
-    .each((i, tr) => {
-      const th = textNorm($(tr).find("td.DataletSideHeading").first().text());
-      if (th === headingText) {
-        val = textNorm($(tr).find("td.DataletData").first().text());
-      }
-    });
-  return val;
-}
-
-function extractPropertyId($) {
-  const hdPin = $("input#hdPin").attr("value") || $("input#hdPin").val();
-  if (hdPin) return textNorm(hdPin);
-  let id = null;
-  $("#datalet_header_row")
-    .find("td")
-    .each((i, td) => {
-      const t = $(td).text();
-      const m = t.match(/Altkey:\s*(\d+)/i);
-      if (m) id = m[1];
-    });
-  return id || "unknown";
-}
-
-function parseDateMDY(s) {
-  // Converts m/d/yyyy or mm/dd/yyyy to yyyy-mm-dd
-  if (!s) return null;
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const mm = m[1].padStart(2, "0");
-  const dd = m[2].padStart(2, "0");
-  const yyyy = m[3];
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function main() {
-  const inputPath = path.join(process.cwd(), "input.html");
-  const html = fs.readFileSync(inputPath, "utf-8");
-  const $ = cheerio.load(html);
-
-  const propId = extractPropertyId($);
-
-  const residentialTable = "table#Residential";
-
-  const hvacRaw = getKV($, residentialTable, "HVAC");
-  const fuelRaw = getKV($, residentialTable, "Fuel");
-
-  // Infer cooling system
-  let cooling_system_type = null;
-  if ((hvacRaw || "").toUpperCase().includes("DUCT")) {
-    cooling_system_type = "CentralAir";
-  }
-
-  // Infer heating
-  let heating_fuel_type = null;
-  if ((fuelRaw || "").toUpperCase().includes("ELECTRIC"))
-    heating_fuel_type = "Electric";
-
-  let heating_system_type = null;
-  if ((hvacRaw || "").toUpperCase().includes("DUCT")) {
-    // forced air ducted typically central system
-    heating_system_type = "Central";
-  }
-
-  // Permits table may include AC changeout; use for install date
-  let hvac_installation_date = null;
-  $("div#datalet_div_12 table#Permit\\ Summary tr").each((i, tr) => {
-    if (i === 0) return; // header
-    const tds = $(tr).find("td.DataletData");
-    if (tds.length >= 3) {
-      const date = textNorm($(tds[0]).text());
-      const desc = textNorm($(tds[2]).text()).toUpperCase();
-      if (desc.includes("AC CHANGE")) {
-        hvac_installation_date = parseDateMDY(date) || hvac_installation_date;
-      }
+function getParcelId($) {
+  const table = $("#property-identification table.container").first();
+  let parcelId = null;
+  table.find("tr").each((i, el) => {
+    const th = cheerio.load(el)("th").first().text().trim();
+    if (/Parcel ID/i.test(th)) {
+      const td = cheerio.load(el)("td").first();
+      const bold = td.find("b");
+      parcelId = (bold.text() || td.text() || "").trim();
     }
   });
+  return parcelId || "unknown";
+}
 
-  const util = {
-    cooling_system_type: cooling_system_type,
+function getTextFromTableByLabel($, containerSelector, label) {
+  const container = $(containerSelector).first();
+  let found = null;
+  container.find("tr").each((i, el) => {
+    const row = cheerio.load(el);
+    const th = row("th").first().text().trim();
+    if (th.toLowerCase().includes(label.toLowerCase())) {
+      const val = row("td").first().text().trim();
+      found = val || null;
+    }
+  });
+  return found;
+}
+
+function mapCooling(acPercentText) {
+  if (!acPercentText) return null;
+  const pct = parseFloat(acPercentText.replace(/[^0-9.]/g, ""));
+  if (isNaN(pct) || pct === 0) return null;
+  // No specific system indicated; default to CentralAir if cooled
+  return "CentralAir";
+}
+
+function mapHeatingType(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t.includes("heat pump")) return "HeatPump";
+  if (t.includes("gas")) return "GasFurnace";
+  if (t.includes("electric") && t.includes("furnace")) return "ElectricFurnace";
+  if (t.includes("electric")) return "Electric";
+  if (t.includes("radiant")) return "Radiant";
+  if (t.includes("baseboard")) return "Baseboard";
+  if (t.includes("central")) return "Central";
+  return null;
+}
+
+function mapHeatingFuel(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (t.includes("natural")) return "NaturalGas";
+  if (t.includes("propane") || t.includes("lp")) return "Propane";
+  if (t.includes("oil")) return "Oil";
+  if (t.includes("kerosene")) return "Kerosene";
+  if (t.includes("wood pellet")) return "WoodPellet";
+  if (t.includes("wood")) return "Wood";
+  if (t.includes("electric")) return "Electric";
+  if (t.includes("geothermal")) return "Geothermal";
+  if (t.includes("solar")) return "Solar";
+  return null;
+}
+
+function extractUtility($) {
+  const interiorTableSelector =
+    "#building-info .interior-container table.container";
+  const acPct = getTextFromTableByLabel($, interiorTableSelector, "A/C %");
+  const heatTypeRaw = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Heat Type",
+  );
+  const heatFuelRaw = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Heat Fuel",
+  );
+  const electricRaw = getTextFromTableByLabel(
+    $,
+    interiorTableSelector,
+    "Electric",
+  );
+
+  const utilities = {
+    cooling_system_type: mapCooling(acPct),
     electrical_panel_capacity: null,
     electrical_panel_installation_date: null,
     electrical_rewire_date: null,
-    electrical_wiring_type: null,
+    electrical_wiring_type: electricRaw ? null : null,
     electrical_wiring_type_other_description: null,
-    heating_fuel_type: heating_fuel_type,
-    heating_system_type: heating_system_type,
+    heating_fuel_type: mapHeatingFuel(heatFuelRaw),
+    heating_system_type: mapHeatingType(heatTypeRaw),
     hvac_capacity_kw: null,
     hvac_capacity_tons: null,
-    hvac_condensing_unit_present: "Unknown",
+    hvac_condensing_unit_present: null,
     hvac_equipment_component: null,
     hvac_equipment_manufacturer: null,
     hvac_equipment_model: null,
-    hvac_installation_date: hvac_installation_date,
+    hvac_installation_date: null,
     hvac_seer_rating: null,
     hvac_system_configuration: null,
     hvac_unit_condition: null,
     hvac_unit_issues: null,
+    plumbing_fixture_count: null,
+    plumbing_fixture_quality: null,
+    plumbing_fixture_type_primary: null,
     plumbing_system_installation_date: null,
     plumbing_system_type: null,
     plumbing_system_type_other_description: null,
@@ -138,20 +141,26 @@ function main() {
     well_installation_date: null,
   };
 
-  const out = {};
-  out[`property_${propId}`] = util;
-
-  ensureDirSync(path.join(process.cwd(), "owners"));
-  fs.writeFileSync(
-    path.join("owners", "utilities_data.json"),
-    JSON.stringify(out, null, 2),
-  );
-  console.log("Wrote owners/utilities_data.json for property_" + propId);
+  return utilities;
 }
 
-try {
+function main() {
+  const inputPath = path.join(process.cwd(), "input.html");
+  const $ = loadHtml(inputPath);
+  const parcelId = getParcelId($);
+  const utilities = extractUtility($);
+
+  const outputDir = path.join(process.cwd(), "owners");
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const output = {};
+  output[`property_${parcelId}`] = utilities;
+
+  const outPath = path.join(outputDir, "utilities_data.json");
+  fs.writeFileSync(outPath, JSON.stringify(output, null, 2), "utf8");
+  console.log(`Wrote utilities data for property_${parcelId} to ${outPath}`);
+}
+
+if (require.main === module) {
   main();
-} catch (err) {
-  console.error("Error generating utilities data:", err.message);
-  process.exit(1);
 }
