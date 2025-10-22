@@ -1171,7 +1171,30 @@ function extract() {
     request_identifier: seed.request_identifier || null,
   };
 
-  // Address: unnormalized
+  // Address extraction logic - Prioritize HTML, then JSON
+  let fullAddressFromHtml = null;
+  // Look for the address in the header row, specifically the last td
+  $("#datalet_header_row")
+    .find("td")
+    .each((i, td) => {
+      // Check if it's the last td and contains an address pattern
+      if (i === 3) { // Assuming the address is in the fourth td (index 3) based on the provided HTML
+        const text = $(td).text().trim();
+        // A simple regex to check if it looks like an address (e.g., contains numbers and street names)
+        if (/\d+\s+[A-Z0-9\s,]+/.test(text)) {
+          fullAddressFromHtml = text;
+          return false; // Stop iterating
+        }
+      }
+    });
+
+  let sourceFullAddress = null;
+  if (fullAddressFromHtml) {
+    sourceFullAddress = fullAddressFromHtml;
+  } else if (unnormalized && unnormalized.full_address) {
+    sourceFullAddress = unnormalized.full_address;
+  }
+
   const address = {
     source_http_request: {
       method: "GET",
@@ -1183,9 +1206,9 @@ function extract() {
     longitude: seed.longitude || null
   };
 
-  // Attempt to parse structured address from unnormalized_address.json
-  if (unnormalized && unnormalized.full_address) {
-    const full = unnormalized.full_address.trim();
+  // Attempt to parse structured address from the determined sourceFullAddress
+  if (sourceFullAddress) {
+    const full = sourceFullAddress.trim();
     let street_number = null,
       pre = null,
       street_name = null,
@@ -1197,11 +1220,9 @@ function extract() {
 
     // Example parsing logic (can be refined based on actual address formats)
     const parts = full.split(",");
-    if (parts.length >= 3) {
+    if (parts.length >= 2) { // Changed from 3 to 2 because HTML address might not have state/zip in separate part
       const streetPart = parts[0].trim();
-      city = parts[1].trim().toUpperCase();
-      const stateZipPart = parts[2].trim();
-
+      
       // Extract street number, pre-directional, street name, and suffix
       const streetMatch = streetPart.match(/^(\d+)\s+([NESW]{1,2})?\s*(.+?)\s+(?:(AVE|BLVD|CIR|CT|DR|HWY|LN|PKWY|PL|RD|RTE|ST|TER|TRL|WAY|AVENUE|BOULEVARD|CIRCLE|COURT|DRIVE|HIGHWAY|LANE|PARKWAY|PLACE|ROAD|ROUTE|STREET|TERRACE|TRAIL))?$/i);
       if (streetMatch) {
@@ -1218,14 +1239,37 @@ function extract() {
         }
       }
 
-      // Extract state, zip, and plus4
-      const stateZipMatch = stateZipPart.match(/^([A-Z]{2})\s+(\d{5})(?:-(\d{4}))?$/);
-      if (stateZipMatch) {
-        state = stateZipMatch[1];
-        zip = stateZipMatch[2];
-        plus4 = stateZipMatch[3] || null;
+      // Handle city, state, zip from the remaining parts
+      if (parts.length >= 2) {
+        const cityStateZipPart = parts[1].trim();
+        const cityStateZipMatch = cityStateZipPart.match(/^(.+?)\s+([A-Z]{2})\s+(\d{5})(?:-(\d{4}))?$/);
+        if (cityStateZipMatch) {
+          city = cityStateZipMatch[1].trim().toUpperCase();
+          state = cityStateZipMatch[2];
+          zip = cityStateZipMatch[3];
+          plus4 = cityStateZipMatch[4] || null;
+        } else {
+          // If no state/zip, assume the rest is city
+          city = cityStateZipPart.toUpperCase();
+        }
       }
+    } else if (parts.length === 1) { // If only one part, assume it's a street address without city/state/zip
+        const streetPart = parts[0].trim();
+        const streetMatch = streetPart.match(/^(\d+)\s+([NESW]{1,2})?\s*(.+?)\s+(?:(AVE|BLVD|CIR|CT|DR|HWY|LN|PKWY|PL|RD|RTE|ST|TER|TRL|WAY|AVENUE|BOULEVARD|CIRCLE|COURT|DRIVE|HIGHWAY|LANE|PARKWAY|PLACE|ROAD|ROUTE|STREET|TERRACE|TRAIL))?$/i);
+        if (streetMatch) {
+            street_number = streetMatch[1];
+            pre = streetMatch[2] ? streetMatch[2].toUpperCase() : null;
+            street_name = streetMatch[3].trim();
+            suffix = streetMatch[4] ? streetMatch[4].toUpperCase() : null;
+        } else {
+            const simpleStreetMatch = streetPart.match(/^(\d+)\s+(.+)$/);
+            if (simpleStreetMatch) {
+                street_number = simpleStreetMatch[1];
+                street_name = simpleStreetMatch[2].trim();
+            }
+        }
     }
+
 
     const suffixMap = {
       RD: "Rd", ROAD: "Rd", ST: "St", STREET: "St", AVE: "Ave", AVENUE: "Ave",
