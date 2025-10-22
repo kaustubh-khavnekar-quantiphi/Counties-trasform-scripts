@@ -1166,7 +1166,7 @@ function extract() {
       : null,
     source_http_request: {
       method: "GET",
-      url: seed?.source_http_request?.url || "https://www.citruspa.org/property-detail/example", // Placeholder URL
+      url: seed?.source_http_request?.url || "https://www.citruspa.org/_web/search/commonsearch.aspx?mode=realprop", // Placeholder URL
     },
     request_identifier: seed.request_identifier || null,
   };
@@ -1198,7 +1198,7 @@ function extract() {
   const address = {
     source_http_request: {
       method: "GET",
-      url: seed?.source_http_request?.url || "https://www.citruspa.org/property-detail/example", // Placeholder URL
+      url: seed?.source_http_request?.url || "https://www.citruspa.org/_web/search/commonsearch.aspx?mode=realprop", // Placeholder URL
     },
     request_identifier: seed.request_identifier || null,
     county_name: seed.county_name || "Citrus",
