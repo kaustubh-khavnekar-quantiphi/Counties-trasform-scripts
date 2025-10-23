@@ -55,7 +55,7 @@ function extractPC($) {
   return m ? m[1] : null;
 }
 
-// Maps Marion County PC codes (marion_property_type.txt) to Elephant property schema enums
+// Marion PC -> Elephant county property enums (sourced via Elephant MCP schema)
 const PROPERTY_CLASSIFICATION_MAP = {
   "00": {
     property_type: "VacantLand",
@@ -569,6 +569,127 @@ function mapPropertyClassification(pc) {
     : { property_type: null, structure_form: null, property_usage_type: null };
 }
 
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeWhitespace(str) {
+  return str ? str.replace(/\s+/g, " ").trim() : "";
+}
+
+function labelToRegex(label, anchored = true) {
+  if (label instanceof RegExp) return label;
+  const pattern = escapeRegExp(label);
+  return new RegExp(anchored ? `^${pattern}$` : pattern, "i");
+}
+
+function extractLabelValue($, labels, options = {}) {
+  const { maxLength = 120 } = options;
+  const nodes = $("td, th, span, div, b, strong").toArray();
+  for (const node of nodes) {
+    const text = normalizeWhitespace($(node).text());
+    if (!text) continue;
+    for (const label of labels) {
+      const exactRegex = labelToRegex(label, true);
+      const inlineRegex = labelToRegex(label, false);
+
+      if (exactRegex.test(text)) {
+        let value = null;
+        const $node = $(node);
+        const nextCell = $node.next("td");
+        if (nextCell.length) value = normalizeWhitespace(nextCell.text());
+        if (!value) {
+          const parentText = normalizeWhitespace($node.parent().text());
+          const match = parentText.match(new RegExp(`${inlineRegex.source}\\s*[:\\-]?\\s*(.+)`, "i"));
+          if (match) value = normalizeWhitespace(match[1]);
+        }
+        if (value && value.length <= maxLength) return value;
+      }
+
+      const inlineMatch = text.match(new RegExp(`${inlineRegex.source}\\s*[:\\-]?\\s*(.+)`, "i"));
+      if (inlineMatch) {
+        const value = normalizeWhitespace(inlineMatch[1]);
+        if (value && value.length <= maxLength) return value;
+      }
+    }
+  }
+
+  const bodyText = $("body").text();
+  for (const label of labels) {
+    const inlineRegex = labelToRegex(label, false);
+    const match = bodyText.match(new RegExp(`${inlineRegex.source}\\s*[:\\-]?\\s*([^\\n]+)`, "i"));
+    if (match) {
+      const value = normalizeWhitespace(match[1]);
+      if (value && value.length <= maxLength) return value;
+    }
+  }
+  return null;
+}
+
+function parseNumberFromText(text) {
+  if (!text) return null;
+  const cleaned = text.replace(/[^0-9.-]/g, "");
+  if (cleaned === "" || cleaned === "-" || cleaned === ".") return null;
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseAreaToSqFt(text) {
+  if (!text) return null;
+  const num = parseNumberFromText(text);
+  if (num == null) return null;
+  const lower = text.toLowerCase();
+  if (/\b(ac|acre)\b/.test(lower)) {
+    return Math.round(num * 43560);
+  }
+  return Math.round(num);
+}
+
+function extractAreaValue($, labels) {
+  const raw = extractLabelValue($, labels, { maxLength: 80 });
+  if (!raw) return null;
+  return parseAreaToSqFt(raw);
+}
+
+function extractNumericValue($, labels) {
+  const raw = extractLabelValue($, labels, { maxLength: 40 });
+  if (!raw) return null;
+  return parseNumberFromText(raw);
+}
+
+function extractIntegerValue($, labels) {
+  const num = extractNumericValue($, labels);
+  return Number.isFinite(num) ? Math.round(num) : null;
+}
+
+function extractYearValue($, labels) {
+  const year = extractIntegerValue($, labels);
+  if (!year) return null;
+  const currentYear = new Date().getFullYear() + 1;
+  if (year < 1700 || year > currentYear) return null;
+  return year;
+}
+
+function mapNumberOfUnitsType(units) {
+  if (!Number.isFinite(units) || units <= 0) return null;
+  const exactMap = {
+    1: "One",
+    2: "Two",
+    3: "Three",
+    4: "Four",
+  };
+  if (exactMap[units]) return exactMap[units];
+  if (units >= 2 && units <= 4) return "TwoToFour";
+  return null;
+}
+
+function cleanSubdivisionValue(value) {
+  if (!value) return null;
+  const cleaned = normalizeWhitespace(value);
+  if (!cleaned) return null;
+  if (cleaned.length > 120) return null;
+  return cleaned;
+}
 
 function extractYearBuiltCheerio($) {
   let year = null;
@@ -837,32 +958,114 @@ function parseSTRB(legal) {
 }
 
 function extractSubdivision($) {
+  const value = extractLabelValue(
+    $,
+    [
+      "Subdivision",
+      "Subdivision Name",
+      "Neighborhood",
+      "Development",
+      "Development Name",
+      "Plat Name",
+    ],
+    { maxLength: 80 },
+  );
+  if (value) return cleanSubdivisionValue(value);
+
   const bodyText = $("body").text();
-
-  // Match common subdivision patterns
-  const subdivisionRegex = /\b(?:PLAT BOOK.*?\n)?([A-Z][A-Z\s&]+(?:SUBDIVISION|UNIT|PHASE|VILLAGE)[^\n]*)/i;
-
+  const subdivisionRegex =
+    /\b(?:PLAT\s+BOOK.*?\n)?([A-Z][A-Z\s&]+(?:SUBDIVISION|UNIT|PHASE|VILLAGE)[^\n]*)/i;
   const match = bodyText.match(subdivisionRegex);
-  return match ? match[1].trim() : null;
+  return cleanSubdivisionValue(match ? match[1] : null);
 }
 
 
+function extractAreaUnderAir($) {
+  return extractAreaValue($, [
+    "Area Under Air",
+    "Area Under Roof",
+    "Heated Area",
+    "Heated Sq Ft",
+    "Heated SqFt",
+    "Living Area",
+    "Finished Area",
+    "Base Living Area",
+    "Heated Living Area",
+  ]);
+}
+
+function extractLivableFloorArea($) {
+  const value = extractAreaValue($, [
+    "Living Area",
+    "Livable Area",
+    "Livable Sq Ft",
+    "Heated Area",
+    "Finished Sq Ft",
+    "Finished Area",
+    "Living Sq Ft",
+    "Gross Living Area",
+  ]);
+  return value;
+}
+
 function extractTotalArea($) {
+  const direct = extractAreaValue($, [
+    "Total Area",
+    "Total Sq Ft",
+    "Total Floor Area",
+    "Total Bldg Area",
+    "Building Area",
+    "Gross Area",
+    "Total Finished Area",
+    "Total Building Sq Ft",
+    "Total Building Area",
+    "Total Heated Area",
+    "Gross Sq Ft",
+  ]);
+  if (direct != null) return direct;
+
   let total = 0;
   $("table").each((i, tbl) => {
-    const headers = $(tbl).find("th").map((i, el) => $(el).text().trim()).get();
-    if (headers.includes("Total Flr Area")) {
-      $(tbl).find("tr").each((rIdx, tr) => {
-        const tds = $(tr).find("td");
-        if (tds.length >= 10) {
-          const areaText = $(tds[9]).text().trim().replace(/,/g, "");
-          const area = parseFloat(areaText);
-          if (!isNaN(area)) total += area;
-        }
-      });
+    const headers = $(tbl).find("th").map((idx, el) => $(el).text().trim()).get();
+    if (headers.some((h) => /Total\s+(Flr|Floor)\s+Area/i.test(h))) {
+      $(tbl)
+        .find("tr")
+        .each((rIdx, tr) => {
+          const tds = $(tr).find("td");
+          if (tds.length >= 10) {
+            const areaText = $(tds[9]).text().trim();
+            const area = parseAreaToSqFt(areaText);
+            if (area != null) total += area;
+          }
+        });
     }
   });
   return total > 0 ? total : null;
+}
+
+function extractEffectiveYearBuilt($) {
+  return extractYearValue($, [
+    "Effective Year Built",
+    "Effective Year",
+    "Eff Year Built",
+    "Effective Yr Built",
+    "Effective Built",
+  ]);
+}
+
+function extractNumberOfUnits($, classification) {
+  const units = extractIntegerValue($, [
+    "Units",
+    "No. of Units",
+    "Number of Units",
+    "Units/Type",
+    "Unit Count",
+    "Total Units",
+  ]);
+  if (units != null) return units;
+
+  if (classification.property_type === "SingleFamily") return 1;
+  return null;
 }
 
 function main() {
@@ -884,32 +1087,64 @@ function main() {
   const parcelId = extractParcelId($, inputHtml);
   const pc = extractPC($);
   const classification = mapPropertyClassification(pc);
-  const yearBuilt = extractYearBuiltCheerio($);
   const zoning = extractZoning($) || null;
   const legalDescription = extractLegalDescription($);
   const taxesAssess = extractTaxesAssessments($);
   const history = extractHistoryTaxes($);
   const sales = extractSalesPrecise($);
   const subdivision = extractSubdivision($);
-  const totalArea = extractTotalArea($);
   const addrParsed = parseAddress(unaddr.full_address || "");
   const strb = parseSTRB(legalDescription || "");
   const { data: extractedStructure } = buildStructure($, inputHtml);
+
+  const structureForm =
+    (extractedStructure && extractedStructure.structure_form) ??
+    classification.structure_form ??
+    null;
+  const structureFinishedBaseArea =
+    (extractedStructure && extractedStructure.finished_base_area) ?? null;
+  const structureBuiltYear =
+    (extractedStructure && extractedStructure.property_structure_built_year) ?? null;
+
+  const yearBuiltCheerio = extractYearBuiltCheerio($);
+  const yearBuiltLabel = extractYearValue($, [
+    "Year Built",
+    "Actual Year Built",
+    "Built Year",
+  ]);
+  const propertyStructureYear =
+    yearBuiltCheerio ?? yearBuiltLabel ?? structureBuiltYear ?? null;
+  const propertyEffectiveYear = extractEffectiveYearBuilt($) ?? null;
+
+  const areaUnderAirHtml = extractAreaUnderAir($);
+  const livableFloorAreaHtml = extractLivableFloorArea($);
+  const totalAreaHtml = extractTotalArea($);
+
+  const resolvedAreaUnderAir =
+    areaUnderAirHtml ?? structureFinishedBaseArea ?? null;
+  const resolvedLivableFloorArea =
+    livableFloorAreaHtml ?? areaUnderAirHtml ?? structureFinishedBaseArea ?? null;
+  const resolvedTotalArea =
+    totalAreaHtml ?? resolvedLivableFloorArea ?? structureFinishedBaseArea ?? null;
+
+  const numberOfUnits = extractNumberOfUnits($, classification);
+  const numberOfUnitsType = mapNumberOfUnitsType(numberOfUnits);
+
   // property.json
   const property = {
-    area_under_air: null,
-    livable_floor_area: null,
-    number_of_units: null,
-    number_of_units_type: null,
+    area_under_air: resolvedAreaUnderAir ?? null,
+    livable_floor_area: resolvedLivableFloorArea ?? null,
+    number_of_units: numberOfUnits ?? null,
+    number_of_units_type: numberOfUnitsType ?? null,
     parcel_identifier: parcelId,
-    property_effective_built_year: null,
+    property_effective_built_year: propertyEffectiveYear,
     property_legal_description_text: legalDescription || null,
-    property_structure_built_year: yearBuilt || null,
+    property_structure_built_year: propertyStructureYear,
     property_type: classification.property_type ?? null,
-    structure_form: classification.structure_form ?? null,
+    structure_form: structureForm,
     property_usage_type: classification.property_usage_type ?? null,
     subdivision: subdivision,
-    total_area: totalArea,
+    total_area: resolvedTotalArea ?? null,
     zoning: zoning,
   };
   writeJSON(path.join(dataDir, "property.json"), property);

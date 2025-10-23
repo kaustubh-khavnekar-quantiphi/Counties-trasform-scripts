@@ -25,6 +25,30 @@ function getYearBuilt($) {
   return year;
 }
 
+function extractPC($) {
+  const bodyText = $("body").text();
+  const m = bodyText.match(/PC:\s*(\d{2})/);
+  return m ? m[1] : null;
+}
+
+const STRUCTURE_FORM_MAP = {
+  "01": "SingleFamilyDetached",
+  "02": "ManufacturedHomeInPark",
+  "03": "MultiFamilyMoreThan10",
+  "04": "ApartmentUnit",
+  "05": "ApartmentUnit",
+  "06": "MultiFamilyMoreThan10",
+  "07": "MultiFamilyMoreThan10",
+  "08": "MultiFamilyLessThan10",
+  "74": "MultiFamilyMoreThan10",
+};
+
+function mapStructureFormFromPC(pc) {
+  if (pc == null) return null;
+  const key = String(pc).padStart(2, "0");
+  return STRUCTURE_FORM_MAP[key] || null;
+}
+
 function getStoriesAndGFA($) {
   let stories = null;
   let gfa = null;
@@ -87,6 +111,8 @@ function getCharacteristicValue($, label) {
 
 function buildStructure($, html) {
   const primeKey = getPrimeKey($, html);
+  const pc = extractPC($);
+  const structureForm = mapStructureFormFromPC(pc);
   const yearBuilt = getYearBuilt($);
   const { stories, gfa } = getStoriesAndGFA($);
   const extStr = getExteriorWall($);
@@ -108,7 +134,8 @@ function buildStructure($, html) {
     roof_covering_material: roofCover ?? null,
     foundation_type: foundationType ?? null,
     flooring_material_primary: flooringMaterial ?? null,
-    interior_wall_finish_primary: wallFinish ?? null
+    interior_wall_finish_primary: wallFinish ?? null,
+    structure_form: structureForm,
   };
 
   return { id: primeKey, data };
@@ -136,4 +163,3 @@ function buildStructure($, html) {
 module.exports = {
   buildStructure
 };
-
