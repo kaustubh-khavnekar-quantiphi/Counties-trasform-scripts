@@ -6,7 +6,7 @@ const cheerio = require("cheerio");
 const PROPERTY_USAGE_MAP = Object.freeze({
   "00": "Residential",
   "01": "Residential",
-  "02": "Residential",
+  "02": "MobileHomePark",
   "03": "Residential",
   "04": "Residential",
   "05": "Residential",
@@ -108,17 +108,55 @@ const PROPERTY_USAGE_MAP = Object.freeze({
 
 const PROPERTY_TYPE_MAP = Object.freeze({
   "00": "LandParcel",
+  "01": "Building",
   "02": "ManufacturedHome",
+  "03": "Building",
   "04": "Unit",
   "05": "Unit",
+  "06": "Building",
+  "07": "LandParcel",
+  "08": "Building",
   "09": "LandParcel",
   "10": "LandParcel",
+  "11": "Building",
+  "12": "Building",
+  "13": "Building",
+  "14": "Building",
+  "15": "Building",
+  "16": "Building",
+  "17": "Building",
+  "18": "Building",
+  "19": "Building",
+  "20": "LandParcel",
+  "21": "Building",
+  "22": "Building",
+  "23": "Building",
+  "24": "Building",
+  "25": "Building",
+  "26": "Building",
+  "27": "Building",
   "28": "LandParcel",
+  "29": "Building",
+  "30": "Building",
+  "31": "Building",
+  "32": "Building",
+  "33": "Building",
+  "34": "Building",
+  "35": "Building",
   "36": "LandParcel",
   "37": "LandParcel",
   "38": "LandParcel",
+  "39": "Building",
   "40": "LandParcel",
-  "49": "LandParcel",
+  "41": "Building",
+  "42": "Building",
+  "43": "LandParcel",
+  "44": "Building",
+  "45": "Building",
+  "46": "Building",
+  "47": "Building",
+  "48": "Building",
+  "49": "Building",
   "50": "LandParcel",
   "51": "LandParcel",
   "52": "LandParcel",
@@ -140,9 +178,27 @@ const PROPERTY_TYPE_MAP = Object.freeze({
   "68": "LandParcel",
   "69": "LandParcel",
   "70": "LandParcel",
-  "80": "LandParcel",
+  "71": "Building",
+  "72": "Building",
+  "73": "Building",
+  "74": "Building",
+  "75": "Building",
+  "76": "LandParcel",
+  "77": "Building",
+  "78": "Building",
+  "79": "Building",
+  "80": "Building",
+  "81": "Building",
   "82": "LandParcel",
-  "90": "LandParcel",
+  "83": "Building",
+  "84": "Building",
+  "85": "Building",
+  "86": "Building",
+  "87": "Building",
+  "88": "Building",
+  "89": "Building",
+  "90": "Building",
+  "91": "LandParcel",
   "92": "LandParcel",
   "93": "LandParcel",
   "94": "LandParcel",
@@ -153,6 +209,36 @@ const PROPERTY_TYPE_MAP = Object.freeze({
   "99": "LandParcel",
 });
 
+const BUILD_STATUS_MAP = Object.freeze(
+  (() => {
+    const next = {};
+    for (const [code, propertyType] of Object.entries(PROPERTY_TYPE_MAP)) {
+      next[code] =
+        propertyType === "LandParcel" ? "VacantLand" : "Improved";
+    }
+    return next;
+  })(),
+);
+
+const STRUCTURE_FORM_MAP = Object.freeze({
+  "01": "SingleFamilyDetached",
+  "02": "MobileHome",
+  "03": "MultiFamilyMoreThan10",
+  "04": "ApartmentUnit",
+  "05": "ApartmentUnit",
+  "06": "MultiFamily5Plus",
+  "07": "MultiFamily5Plus",
+  "08": "MultiFamilyLessThan10",
+});
+
+const OWNERSHIP_ESTATE_TYPE_MAP = Object.freeze({
+  "04": "Condominium",
+  "05": "Cooperative",
+  "09": "Condominium",
+  "90": "Leasehold",
+  "94": "RightOfWay",
+});
+
 const NUMBER_OF_UNITS_TYPE_MAP = Object.freeze({
   "01": "One",
   "02": "One",
@@ -160,6 +246,8 @@ const NUMBER_OF_UNITS_TYPE_MAP = Object.freeze({
 });
 
 const DEFAULT_PROPERTY_TYPE = "Building";
+const DEFAULT_BUILD_STATUS = "Improved";
+const DEFAULT_OWNERSHIP_ESTATE_TYPE = "FeeSimple";
 
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -346,11 +434,12 @@ function main() {
   clearDir(dataDir);
   const html = fs.readFileSync("input.html", "utf8");
   const $ = cheerio.load(html);
-  const unnorm = readJson("unnormalized_address.json");
   const seed = readJson("property_seed.json");
   const ownersPath = path.join("owners", "owner_data.json");
   const utilsPath = path.join("owners", "utilities_data.json");
   const layoutPath = path.join("owners", "layout_data.json");
+  const unnorm = readJson("unnormalized_address.json");
+
   let ownersJson = null,
     utilsJson = null,
     layoutJson = null;
@@ -408,6 +497,9 @@ function main() {
   let property_type = null;
   let property_usage_type = null;
   let number_of_units_type = null;
+  let build_status = null;
+  let structure_form = null;
+  let ownership_estate_type = null;
   if (dorText) {
     const m = dorText.match(/\((\d{2})\)\s*(.*)/);
     let code = null,
@@ -426,6 +518,16 @@ function main() {
         errEnum(dorText, "property", "property_usage_type");
       }
       property_type = PROPERTY_TYPE_MAP[code] || DEFAULT_PROPERTY_TYPE;
+      build_status = BUILD_STATUS_MAP[code] || DEFAULT_BUILD_STATUS;
+      structure_form = Object.prototype.hasOwnProperty.call(
+        STRUCTURE_FORM_MAP,
+        code,
+      )
+        ? STRUCTURE_FORM_MAP[code]
+        : null;
+      ownership_estate_type =
+        OWNERSHIP_ESTATE_TYPE_MAP[code] ||
+        DEFAULT_OWNERSHIP_ESTATE_TYPE;
       if (Object.prototype.hasOwnProperty.call(NUMBER_OF_UNITS_TYPE_MAP, code)) {
         number_of_units_type = NUMBER_OF_UNITS_TYPE_MAP[code];
       } else {
@@ -464,6 +566,9 @@ function main() {
     parcel_identifier: parcelId,
     property_type,
     property_usage_type,
+    build_status: build_status || null,
+    structure_form: structure_form || null,
+    ownership_estate_type: ownership_estate_type || null,
     property_structure_built_year: builtYear || null,
     number_of_units_type: number_of_units_type || null,
     livable_floor_area: livable_floor_area || null,
@@ -607,17 +712,6 @@ function main() {
       state_code = m[2];
       postal_code = m[3];
       plus_four_postal_code = m[4] || null;
-    }
-  }
-  if (!city_name && unnorm && unnorm.full_address) {
-    const m2 = unnorm.full_address.match(
-      /,\s*([^,]+),\s*([A-Z]{2})\s+(\d{5})(?:-(\d{4}))?$/,
-    );
-    if (m2) {
-      city_name = m2[1].trim().toUpperCase();
-      state_code = m2[2];
-      postal_code = m2[3];
-      plus_four_postal_code = m2[4] || null;
     }
   }
   let section = null,
