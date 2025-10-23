@@ -10,6 +10,1225 @@ const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
+const propertyTypeMapping = [
+  {
+    "property_usecode": "0000 - Vacant Residential",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "0010 - Vacant Residential Future Development Tract",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "0011 - Vacant Residential Platted Undeveloped",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "0100 - Single Family",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "0130 - Single Family Townhouse",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "TownhouseRowhouse",
+    "property_usage_type": "Residential",
+    "property_type": "Townhouse"
+  },
+  {
+    "property_usecode": "0140 - Single Family Timeshare",
+    "ownership_estate_type": "Timeshare",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Hotel",
+    "property_type": "Timeshare"
+  },
+  {
+    "property_usecode": "0199 - Single Family HX Demo Rebuilding per 193.155",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "UnderConstruction",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "0200 - Mobile Homes",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHousing",
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "0205 - Mobile Homes Yearly Tags",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "0210 - Mobile Homes Converted to Single Family",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "0300 - Multi-Family (10+ Units)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyMoreThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "0400 - Condos",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": "ApartmentUnit",
+    "property_usage_type": "Residential",
+    "property_type": "Condominium"
+  },
+  {
+    "property_usecode": "0410 - Condo Garages",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
+  },
+  {
+    "property_usecode": "0420 - Condo Boat Slips",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
+  },
+  {
+    "property_usecode": "0700 - Miscellaneous Residential (Migrant Camps, Boarding Homes, etc.)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "MiscellaneousResidential"
+  },
+  {
+    "property_usecode": "0800 - Multi-Family (Less than 10 Units)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
+  },
+  {
+    "property_usecode": "0805 - Multi-Family Mobile Homes with Yearly Tags",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "MobileHomePark",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "0830 - Multi Family Rental",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
+  },
+  {
+    "property_usecode": "0900 - Vacant Residential Common Elements",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "0901 - Improved Residential Common Elements",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
+  },
+  {
+    "property_usecode": "0902 - Residential Condo Common Elements",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ResidentialCommonElementsAreas",
+    "property_type": "ResidentialCommonElementsAreas"
+  },
+  {
+    "property_usecode": "1000 - Vacant Commercial",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "1001 - Commercial Condo Common Elements",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "1100 - Stores",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1102 - Mobile Home Stores",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1105 - Owner Occupied Stores",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1200 - Mixed Use (Store/Office/Residential Combo)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1205 - Owner Occupied Mixed Use (Store/Office/Residential Combo)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1300 - Department Stores",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "DepartmentStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1400 - Supermarkets",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Supermarket",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1500 - Regional Shopping Centers",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ShoppingCenterRegional",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1600 - Community Shopping Centers",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ShoppingCenterCommunity",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1700 - Office Buildings (1Story)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1705 - Office Buildings (1Story) (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1720 - Radio Stations",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TelecommunicationsFacility",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1730 - Business Office Parks",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1735 - Business Office Parks (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1740 - Professional Condo Office",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1745 - Professional Condo Office (Owner Occupied)",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1800 - Office Buildings (Multi-Story)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1805 - Office Buildings (Multi-Story) (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1900 - Professional Service Buildings",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "1905 - Professional Service Buildings (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2000 - Transit Terminals",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2010 - Airports",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2020 - Marinas &amp; Boat Slips",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "2100 - Restaurants &amp; Cafeterias",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2105 - Restaurants &amp; Cafeterias (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2200 - Drive-In Restaurants",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2205 - Drive-In Restaurants (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2300 - Financial Institutions, Banks, Savings &amp; Loans",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "FinancialInstitution",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2305 - Financial Institutions, Banks, Savings &amp; Loans (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "FinancialInstitution",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2500 - Repair Service Shops (Non-automotive)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2505 - Repair Service Shops (Non-automotive) (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2530 - Salon/Spa/Barber Shops",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2535 - Salon/Spa/Barber Shops (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2600 - Service Stations (Automotive)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ServiceStation",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2605 - Service Stations (Automotive) (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ServiceStation",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2660 - Car Washes",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2665 - Car Washes (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2700 - Sales &amp; Service, Repair, Rental &amp; Storage (Auto, Marine, Mobile Home &amp; Farm Equipment)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2705 - Sales &amp; Service  (Automotive) (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2800 - Mobile Home Parks",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "MobileHomePark",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "2810 - Parking Lots",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "2815 - Parking Lots (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TransportationTerminal",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "2900 - Wholesale Outlets",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "2905 - Wholesale Outlets (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3000 - Florists &amp; Greenhouses",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NurseryGreenhouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3005 - Florists &amp; Greenhouses (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NurseryGreenhouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3205 - Theaters (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Theater",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3300 - Nightclubs, Cocktail Lounges &amp; Bars",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3305 - Nightclubs, Lounges,Bars (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3410 - Bowling Alleys",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3500 - Tourist Attractions",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3505 - Tourist Attraction (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3600 - Camps",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "3800 - Golf Courses &amp; Driving Ranges",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GolfCourse",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "3900 - Hotels &amp; Motels",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3910 - Bed &amp; Breakfasts",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "3940 - Condo Hotels",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Condominium"
+  },
+  {
+    "property_usecode": "3950 - Condo Timeshares",
+    "ownership_estate_type": "Timeshare",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Timeshare"
+  },
+  {
+    "property_usecode": "4001 - Industrial Condo Common Elements",
+    "ownership_estate_type": "Condominium",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "4100 - Light Manufacturing",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LightManufacturing",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4105 - Light Manufacturing (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LightManufacturing",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4200 - Heavy Manufacturing",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4205 - Heavy Manufacturing (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4305 - Lumber Yards &amp; Sawmills (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LumberYard",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4310 - Building Materials &amp; Supply",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LumberYard",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4315 - Building Materials &amp; Supply (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LumberYard",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4400 - Packing Plants",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PackingPlant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4500 - Canneries, Distilleries &amp; Wineries",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Cannery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4600 - Other Food Processing",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Cannery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4700 - Mineral Processing &amp; Cement Plants",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4800 - Warehousing &amp; Distribution Terminals",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4803 - Warehousing &amp; Distribution Terminals (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4805 - Warehousing - Mini",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4810 - Warehousing - Flex Space",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4815 - Warehouse-Flex Space Owner Occupied",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4840 - Condo Warehousing - Flex Space",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4845 - Condo Warehouse Owner Occupied",
+    "ownership_estate_type": "Condominium",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "4900 - Open Storage, Junk Yards, etc.",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "4905 - Open Storage (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "4910 - Open Storage (RV and Boat)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5000 - Improved Agriculture",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5300 - Cropland Class 3",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CroplandClass3",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5400 - Timberland 90+",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5500 - Timberland 80-89",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5600 - Timberland 70-79",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5800 - Timberland 50-59",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "5900 - Timberland Unclassified",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "6200 - Grazing Class 3",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "6600 - Orchard Groves, Citrus, etc.",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OrchardGroves",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "6700 - Horses, Poultry, Bees, Tropical Fish, etc.",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LivestockFacility",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "6900 - Miscellaneous Agriculture",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "6950 - Sod Farm",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Ornamentals",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "7100 - Churches",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Church",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7200 - Private School &amp; Colleges",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7205 - Private Schools/Colleges (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7300 - Privately Owned Hospitals",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateHospital",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7410 - Assisted Living Facilities",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Retirement"
+  },
+  {
+    "property_usecode": "7415 - Assisted Living (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Retirement"
+  },
+  {
+    "property_usecode": "7420 - Continued Care Facilities",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Retirement"
+  },
+  {
+    "property_usecode": "7425 - Continued Care Facility (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Retirement"
+  },
+  {
+    "property_usecode": "7500 - Non-Profit, Charitable &amp; Orphanages",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NonProfitCharity",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7600 - Cemeteries, Mortuaries &amp; Crematoriums",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MortuaryCemetery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7700 - Clubs, Lodges or Union Halls",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ClubsLodges",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7705 - Clubs, Lodges or Union Halls (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ClubsLodges",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7740 - Fitness Clubs",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7745 - Fitness Clubs (Owner Occupied)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7800 - Sanitariums, Convalescent &amp; Rest Homes",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "SanitariumConvalescentHome",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "7900 - Cultural Organizations &amp; Facilities",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CulturalOrganization",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "8100 - Military",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Military",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8200 - Forests, Parks &amp; Recreational Areas",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8210 - Forests, Parks &amp; Recreational Areas - TIITF",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8220 - Forests, Parks &amp; Recreational Areas - SJRWMD",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8300 - Public Schools",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "8400 - Public Colleges",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "8600 - County Owned",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8700 - State Owned",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8710 - State Owned - TIITF",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8720 - State Owned - SJRWMD",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8800 - Federally Owned",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "8900 - Municipally Owned",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9000 - Leasehold Interests (Govt Owned Leased by Non-Govt)",
+    "ownership_estate_type": "Leasehold",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9100 - Utilities",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9200 - Mining Lands",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9400 - ROWs, Roads, Irrigation Channels, Ditches, etc.",
+    "ownership_estate_type": "RightOfWay",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9500 - Rivers, Lakes &amp; Submerged Lands",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "RiversLakes",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9600 - Marshes, Wetlands, Waste Lands",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9700 - Recreational, Parkland, Classified Use, Conservation &amp; Mitigation",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Recreational",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9800 - Centrally Assessed",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "9900 - Acreage Not Zoned Agricultural",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "VacantLand"
+  }
+]
+
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -111,28 +1330,31 @@ function extractUseCode($) {
   return code || null;
 }
 
-function mapPropertyTypeFromUseCode(code) {
-  if (!code) return null;
-  const u = code.toUpperCase();
-  if (u.includes("MULTI")) {
-    if (u.includes("10+") || u.includes("MORE")) {
-      return "MultiFamilyMoreThan10";
-    }
-    if (u.includes("LESS")) {
-      return "MultiFamilyLessThan10";
-    }
-    return "MultipleFamily";
+const propertyTypeByUseCode = propertyTypeMapping.reduce((lookup, entry) => {
+  if (!entry || !entry.property_usecode) {
+    return lookup;
   }
-  if (u.includes("SINGLE")) return "SingleFamily";
-  if (u.includes("CONDO")) return "Condominium";
-  if (u.includes("VACANT")) return "VacantLand";
-  if (u.includes("DUPLEX")) return "Duplex";
-  if (u.includes("TOWNHOUSE")) return "Townhouse";
-  if (u.includes("APARTMENT")) return "Apartment";
-  if (u.includes("MOBILE")) return "MobileHome";
-  if (u.includes("PUD")) return "Pud";
-  if (u.includes("RETIREMENT")) return "Retirement";
-  if (u.includes("COOPERATIVE")) return "Cooperative";
+
+  const normalizedUseCode = entry.property_usecode.match(/\d{4}/)[0];
+
+  if (!normalizedUseCode) {
+    return lookup;
+    }
+
+  lookup[normalizedUseCode] = entry;
+  return lookup;
+}, {});
+
+function mapPropertyTypeFromUseCode(code) {
+  if (!code && code !== 0) return null;
+
+  const normalizedInput = String(code).match(/\d{4}/)[0];
+  if (!normalizedInput) return null;
+
+  if (Object.prototype.hasOwnProperty.call(propertyTypeByUseCode, normalizedInput)) {
+    return propertyTypeByUseCode[normalizedInput];
+  }
+
   return null;
 }
 
@@ -311,8 +1533,8 @@ function extractValuation($) {
 function writeProperty($, parcelId) {
   const legal = extractLegalDescription($);
   const useCode = extractUseCode($);
-  const propertyType = mapPropertyTypeFromUseCode(useCode);
-  if (!propertyType) {
+  const propertyMapping = mapPropertyTypeFromUseCode(useCode);
+  if (!propertyMapping) {
     throw {
       type: "error",
       message: `Unknown enum value ${useCode}.`,
@@ -327,7 +1549,11 @@ function writeProperty($, parcelId) {
     property_legal_description_text: legal || null,
     property_structure_built_year: years.actual || null,
     property_effective_built_year: null,
-    property_type: propertyType,
+    property_type: propertyMapping.property_type,
+    ownership_estate_type: propertyMapping.ownership_estate_type,
+    build_status: propertyMapping.build_status,
+    structure_form: propertyMapping.structure_form,
+    property_usage_type: propertyMapping.property_usage_type,
     livable_floor_area: null,
     total_area: totalArea >= 10 ? String(totalArea) : null,
     number_of_units_type: null,
@@ -916,6 +2142,14 @@ function attemptWriteAddress(unnorm, secTwpRng) {
   writeJSON(path.join("data", "address.json"), address);
 }
 
+function extractStructure(parcelId) {
+  const structureData = readJSON(path.join("owners", "structure_data.json"));
+  const key = `property_${parcelId}`;
+  const s = structureData[key];
+  if (!s) return;
+  writeJSON(path.join("data", "structure.json"), s);
+}
+
 function main() {
   ensureDir("data");
   const $ = loadHTML();
@@ -945,6 +2179,7 @@ function main() {
   // Address last
   const secTwpRng = extractSecTwpRng($);
   attemptWriteAddress(unnormalized, secTwpRng);
+  extractStructure(parcelId);
 }
 
 if (require.main === module) {

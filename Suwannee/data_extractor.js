@@ -2,6 +2,906 @@ const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
+const propertyTypeMapping = [
+  {
+    "property_usecode": "CENTRALLY ASSESSED (9800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Railroad",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "IMPROVED AGRICULTURE (5000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Agricultural",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY (0100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "VACANT (0000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Unknown",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "GRAZING SOIL CAP 3 (6200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "TIMBERLAND 70-79 (5600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "FOREST, PARKS REC (8200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MOBILE HOME (0200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHousing",
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "SUB-SURFACE RIGHTS (9300)",
+    "ownership_estate_type": "SubsurfaceRights",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "GRAZING SOIL CAP 2 (6100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MOBILE HOME (0220)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHousingMultiWide",
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "TIMBERLAND 80-89 (5500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "TIMBERLAND 60-69 (5700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "NON-AG ACREAGE (9900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "COUNTY (8600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "STATE (8700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MINING - 10 (9210)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "REPAIR SERV NON AUTO (2500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND NON-CLASS (5900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "CROPLAND SOIL CAP 2 (5200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CroplandClass2",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "GRAZING SOIL CAP 4 (6300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "CROPLAND SOIL CAP 3 (5300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "CroplandClass3",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "TIMBERLAND 90+ (5400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "UTILITIES (9100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "CHURCHES (7100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Church",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND 80-89 (5520)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "GRAZING SOIL CAP 1 (6000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MOBILE HOME - RIVER (0202)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHousingMultiWide",
+    "property_usage_type": "Residential",
+    "property_type": "ManufacturedHome"
+  },
+  {
+    "property_usecode": "VAC INSTITUTIONAL (7000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "NonProfitCharity",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "WAREHOUSE STOR/DIST (4800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "STORES, 1 STORY (1100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RV PARK/SFR (3602)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "Recreational",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "TIMBERLAND 70-79 (5630)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "VACANT COMMERCIAL (1000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MINING (9200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MineralProcessing",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MORTUARY/CEMETERY (7600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MortuaryCemetery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "LIGHT MANUFACTURE (4100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LightManufacturing",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RIGHTS-OF-WAY (9400)",
+    "ownership_estate_type": "RightOfWay",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - 02 (0102)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "GROVES/ORCHARDS (6600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OrchardGroves",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MULTI-FAM <10 UNITS (0800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
+  },
+  {
+    "property_usecode": "MULTI-FAM <10 UNITS - 50 (0850)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyLessThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyLessThan10"
+  },
+  {
+    "property_usecode": "CLUBS/LODGES HALLS (7700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ClubsLodges",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "ORNAMENTALS/MISC (6900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Ornamentals",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "TIMBERLAND 80-89 - 70 (5570)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MODULAR HOME (0201)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "Modular",
+    "property_usage_type": "Residential",
+    "property_type": "Modular"
+  },
+  {
+    "property_usecode": "OFF BLDG MULTI-STORY (1800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "REC AND PARK LAND (9700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ForestParkRecreation",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "OFF BLDG 1 STORY (1700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - 05 (0105)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "PROFESSIONAL BLDG (1900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY (0150)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "HOMES FOR THE AGED (7400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HomesForAged",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MH PARK (2800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "MobileHomePark",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "COMMUNITY SHOPPING (1600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ShoppingCenterCommunity",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND 70-79 (5620)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MILITARY (8100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Military",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RESTAURANTS/CAFE (2100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SUB-SURFACE RIGHTS - 02 (9302)",
+    "ownership_estate_type": "SubsurfaceRights",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "POULTRY/BEES/FISH (6700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Poultry",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "SINGLE FAMILY - 01 (0101)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "SingleFamilyDetached",
+    "property_usage_type": "Residential",
+    "property_type": "SingleFamily"
+  },
+  {
+    "property_usecode": "TOUR ATTRACT-PERM (3500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "FINANCIAL INST (2300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "FinancialInstitution",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "NON-PROFIT SERVICE (7500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "NonProfitCharity",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SUB-SURFACE RIGHTS - 01 (9301)",
+    "ownership_estate_type": "SubsurfaceRights",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ReferenceParcel",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "NIGHTCLUBS/BARS (3300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MUNICIPAL (8900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WASTELAND/SLOUGH (9600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Conservation",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "PRIVATE HOSPITALS (7300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateHospital",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VEHICLE SL/SERV/RENT (2700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "AutoSalesRepair",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "DRIVE-IN REST (2200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "HOTELS AND MOTELS (3900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SUPERMARKET (1400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Supermarket",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "WAREHOUSE STOR/DIST - 01 (4801)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MULTI-FAM 10+ UNITS (0300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "MultiFamilyMoreThan10",
+    "property_usage_type": "Residential",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "MIXED USE (1200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "DRIVE-IN REST - 01 (2201)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Restaurant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "INS COMPANY OFF (2400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PROFESSIONAL BLDG - 02 (1902)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "SERVICE STATIONS (2600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "ServiceStation",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND 70-79 (5610)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "OPEN STORAGE (4900)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "JUNK YARD STORAGE (4301)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OpenStorage",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "VACANT INDUSTRIAL (4000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "Industrial",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "PRIVATE SCHOOLS (7200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "RV PARK/CAMPS (3600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "Recreational",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "WAREHOUSE STOR/DIST - 02 (4802)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Warehouse",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PUBLIC SCHOOLS (8300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "FEDERAL (8800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "STORES, 1 STORY (1101)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "RetailStore",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CAMPGROUND W/STORE (3601)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": "ManufacturedHomeInPark",
+    "property_usage_type": "Recreational",
+    "property_type": "MultiFamilyMoreThan10"
+  },
+  {
+    "property_usecode": "TIMBERLAND 50-59 (5800)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "CROPLAND SOIL CAP 1 (5100)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "DrylandCropland",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "ENCL THR/AUDITORIUM (3200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Theater",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PROFESSIONAL BLDG - 01 (1901)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "OfficeBuilding",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND 60-69 (5720)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "OTHER FOOD PROC (4600)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Cannery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "HOSPITALS (8500)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PublicHospital",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "LUMBER YARDS (4300)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "LumberYard",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MORTUARY/CEMETERY - 99 (7699)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MortuaryCemetery",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "PRIVATE SCHOOLS - 01 (7201)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PrivateSchool",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "LAUNDROMAT (2501)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Commercial",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "VACANT GOVERMENTAL (8000)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "HOTELS AND MOTELS - 01 (3901)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "BWL AL/SKT RNK/PL HL (3400)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Entertainment",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "TIMBERLAND 80-89 - 30 (5530)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "TimberLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "GRAZING SOIL CAP 3 (6280)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GrazingLand",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "UTILITIES (9180)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Utility",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "PROCESSING PLANT (4101)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "PackingPlant",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "HEAVY MANUFACTURE (4200)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "HeavyManufacturing",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "NON-AG ACREAGE - 05 (9905)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "VacantLand",
+    "structure_form": null,
+    "property_usage_type": "TransitionalProperty",
+    "property_type": "VacantLand"
+  },
+  {
+    "property_usecode": "MISC RESIDENTIAL/CAMPS (0700)",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Residential",
+    "property_type": "MiscellaneousResidential"
+  }
+]
+
+
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
@@ -62,35 +962,32 @@ function extractParcelId($) {
   return id || "unknown";
 }
 
-function mapPropertyTypeFromUse(useText) {
-  if (!useText) return null;
-  const u = useText.toUpperCase();
-  // Known patterns
-  if (u.includes("MULTI")) {
-    if (u.includes("10+") || u.includes("MORE")) {
-      return "MultiFamilyMoreThan10";
-    }
-    if (u.includes("LESS")) {
-      return "MultiFamilyLessThan10";
-    }
-    return "MultipleFamily";
+const propertyTypeByUseCode = propertyTypeMapping.reduce((lookup, entry) => {
+  if (!entry || !entry.property_usecode) {
+    return lookup;
   }
-  if (u.includes("SINGLE") || u.includes("SFR")) return "SingleFamily";
-  if (u.includes("CONDO")) return "Condominium";
-  if (u.includes("VACANT")) return "VacantLand";
-  if (u.includes("DUPLEX")) return "Duplex";
-  if (u.includes("TOWNHOUSE")) return "Townhouse";
-  if (u.includes("APARTMENT")) return "Apartment";
-  if (u.includes("MOBILE")) return "MobileHome";
-  if (u.includes("PUD")) return "Pud";
-  if (u.includes("RETIREMENT")) return "Retirement";
-  if (u.includes("COOPERATIVE")) return "Cooperative";
-  // Otherwise unknown -> error per requirement
-  throw {
-    type: "error",
-    message: `Unknown enum value ${useText}.`,
-    path: "property.property_type",
-  };
+
+  const normalizedUseCode = entry.property_usecode.match(/\d{4}/)[0];
+
+  if (!normalizedUseCode) {
+    return lookup;
+  }
+
+  lookup[normalizedUseCode] = entry;
+  return lookup;
+}, {});
+
+function mapPropertyTypeFromUseCode(code) {
+  if (!code && code !== 0) return null;
+
+  const normalizedInput = String(code).match(/\d{4}/)[0];
+  if (!normalizedInput) return null;
+
+  if (Object.prototype.hasOwnProperty.call(propertyTypeByUseCode, normalizedInput)) {
+    return propertyTypeByUseCode[normalizedInput];
+  }
+
+  return null;
 }
 
 function extractProperty($) {
@@ -117,9 +1014,12 @@ function extractProperty($) {
       }
     }
   });
-  let property_type = null;
+  let propertyMapping = null;
   if (useText) {
-    property_type = mapPropertyTypeFromUse(useText);
+    propertyMapping = mapPropertyTypeFromUseCode(useText);
+  }
+  if(!propertyMapping) {
+    throw new Error("Property type not found");
   }
 
   // Building Characteristics to compute years and areas
@@ -151,7 +1051,11 @@ function extractProperty($) {
     parcel_identifier: parcel_identifier || "",
     property_legal_description_text: legal || null,
     property_structure_built_year: property_structure_built_year || null,
-    property_type: property_type || null,
+    property_type: propertyMapping.property_type,
+    ownership_estate_type: propertyMapping.ownership_estate_type,
+    build_status: propertyMapping.build_status,
+    structure_form: propertyMapping.structure_form,
+    property_usage_type: propertyMapping.property_usage_type,
     number_of_units_type: null,
     livable_floor_area: livable_floor_area,
     area_under_air: area_under_air,
@@ -427,7 +1331,10 @@ function extractTaxes($) {
       period_end_date: null,
     });
   }
-  const b2025 = extractBlock("2025 Preliminary Certified");
+  let b2025 = extractBlock("2025 Certified Values");
+  if (!b2025) {
+    b2025 = extractBlock("2025 Preliminary Certified");
+  }
   if (b2025) {
     taxes.push({
       tax_year: 2025,
@@ -436,6 +1343,20 @@ function extractTaxes($) {
       property_building_amount: b2025.building ?? null,
       property_land_amount: b2025.land ?? null,
       property_taxable_value_amount: b2025.taxable ?? null,
+      monthly_tax_amount: null,
+      period_start_date: null,
+      period_end_date: null,
+    });
+  }
+  const b2026 = extractBlock("2026 Working Values");
+  if (b2026) {
+    taxes.push({
+      tax_year: 2026,
+      property_assessed_value_amount: b2026.assessed ?? null,
+      property_market_value_amount: b2026.just ?? null,
+      property_building_amount: b2026.building ?? null,
+      property_land_amount: b2026.land ?? null,
+      property_taxable_value_amount: b2026.taxable ?? null,
       monthly_tax_amount: null,
       period_start_date: null,
       period_end_date: null,
@@ -560,6 +1481,7 @@ function main() {
     // Owners/utilities/layout must be built from their JSONs
     const ownerData = readJson(path.join("owners", "owner_data.json"));
     const utilitiesData = readJson(path.join("owners", "utilities_data.json"));
+    const structuresData = readJson(path.join("owners", "structure_data.json"));
     const layoutData = readJson(path.join("owners", "layout_data.json"));
 
     // Property
@@ -663,6 +1585,16 @@ function main() {
     }
     if (utilEntry) {
       writeJson(path.join(dataDir, "utility.json"), utilEntry);
+    }
+    let structureEntry = null;
+    for (const k of utilKeyVariants) {
+      if (structuresData[k]) {
+        structureEntry = structuresData[k];
+        break;
+      }
+    }
+    if (structureEntry) {
+      writeJson(path.join(dataDir, "structure.json"), structureEntry);
     }
 
     // Layouts
