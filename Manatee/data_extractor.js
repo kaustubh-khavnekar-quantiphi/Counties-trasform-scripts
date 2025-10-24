@@ -1951,6 +1951,7 @@ function mapInstrumentToDeedType(instr) {
   const u = instr.trim().toUpperCase();
   if (u === "WD") return "Warranty Deed";
   if (u == "TD") return "Tax Deed";
+  if (u == "CD") return "Correction Deed";
   if (u == "QC") return "Quitclaim Deed";
   if (u == "SW") return "Special Warranty Deed";
   return null;
