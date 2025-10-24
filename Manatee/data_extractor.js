@@ -2571,6 +2571,45 @@ async function main() {
             });
           loopIdx++;
         };
+        const currentOwner = ownersByDate["current"] || [];
+        relPersonCounter = 0;
+        relCompanyCounter = 0;
+        currentOwner
+        .filter((o) => o.type === "person")
+        .forEach((o) => {
+          const pIdx = findPersonIndexByName(o.first_name, o.last_name);
+          if (pIdx) {
+            relPersonCounter++;
+            writeJSON(
+              path.join(
+                "data",
+                `relationship_person_to_property_${relPersonCounter}.json`,
+              ),
+              {
+                from: { "/": `./person_${pIdx}.json` },
+                to: { "/": `./property.json` },
+              },
+            );
+          }
+        });
+        currentOwner
+        .filter((o) => o.type === "company")
+        .forEach((o) => {
+          const cIdx = findCompanyIndexByName(o.name);
+          if (cIdx) {
+            relCompanyCounter++;
+            writeJSON(
+              path.join(
+                "data",
+                `relationship_company_to_property_${relCompanyCounter}.json`,
+              ),
+              {
+                from: { "/": `./company_${cIdx}.json` },
+                to: { "/": `./property.json` },
+              },
+            );
+          }
+        });
     }
   }
 }
