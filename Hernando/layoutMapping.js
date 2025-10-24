@@ -33,19 +33,23 @@ function getBedsBaths($) {
   return { beds, baths };
 }
 
-function getBaseArea($) {
+function getAreaBreakdown($) {
   let base = null;
+  let aux = null;
   $("#MainContent_frmParcelDetail_gvBldgs tr").each((i, el) => {
     const tds = $(el).find("td");
     if (tds.length >= 4) {
       const areaText = $(tds[3]).text().trim();
       if (areaText && /\d+\s*\/\s*\d+/.test(areaText)) {
         const parts = areaText.split("/");
-        base = parseInt(parts[0].replace(/[^0-9]/g, ""), 10);
+        const basePart = parts[0] || "";
+        const auxPart = parts[1] || "";
+        base = parseInt(basePart.replace(/[^0-9]/g, ""), 10);
+        aux = parseInt(auxPart.replace(/[^0-9]/g, ""), 10);
       }
     }
   });
-  return base;
+  return { baseArea: isNaN(base) ? null : base, auxArea: isNaN(aux) ? null : aux };
 }
 
 function makeDefaultLayout(spaceType, index, size) {
@@ -84,11 +88,10 @@ function makeDefaultLayout(spaceType, index, size) {
     pool_surface_type: null,
     pool_water_quality: null,
     bathroom_renovation_date: null,
-    cabinet_style: null,
-    countertop_material: null,
     kitchen_renovation_date: null,
     flooring_installation_date: null,
-    size_square_feet: size == null ? null : size,
+    livable_area_sq_ft: null,
+    total_area_sq_ft: null,
   };
 }
 
@@ -99,9 +102,22 @@ function main() {
   const propertyId = extractPropertyId($);
 
   const { beds, baths } = getBedsBaths($);
-  const baseArea = getBaseArea($);
+  const { baseArea, auxArea } = getAreaBreakdown($);
 
   const layouts = [];
+  const totalArea =
+    baseArea == null && auxArea == null
+      ? null
+      : (baseArea || 0) + (auxArea || 0);
+
+  const buildingLayout = makeDefaultLayout(
+    "Building",
+    layouts.length + 1,
+    baseArea,
+  );
+  buildingLayout.livable_area_sq_ft = baseArea == null ? null : baseArea;
+  buildingLayout.total_area_sq_ft = totalArea;
+  layouts.push(buildingLayout);
   if (beds != null) {
     for (let i = 1; i <= beds; i++) {
       layouts.push(makeDefaultLayout("Bedroom", i, null));
@@ -114,8 +130,8 @@ function main() {
       );
     }
   }
-  // Add a Living Room with base area as an approximation if available
-  layouts.push(makeDefaultLayout("Living Room", layouts.length + 1, baseArea));
+  // Living room entry with no property-wide sizing assumptions
+  layouts.push(makeDefaultLayout("Living Room", layouts.length + 1, null));
 
   const outDir = path.join(process.cwd(), "owners");
   fs.mkdirSync(outDir, { recursive: true });

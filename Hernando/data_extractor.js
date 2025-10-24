@@ -249,6 +249,97 @@ const DEFAULT_PROPERTY_TYPE = "Building";
 const DEFAULT_BUILD_STATUS = "Improved";
 const DEFAULT_OWNERSHIP_ESTATE_TYPE = "FeeSimple";
 
+// Maps deed descriptions from DeedMapping.txt to Elephant deed_type enums
+const DEED_DESCRIPTION_TO_ELEPHANT_TYPE = Object.freeze({
+  "ADMINISTRATORS DEED": "Administrator's Deed",
+  AFFIDAVIT: "Miscellaneous",
+  "AGREEMENT FOR DEED": "Contract for Deed",
+  "ASSIGNMENT OF CONTRACT": "Assignment of Contract",
+  "CERTIFICATE OF TITLE": "Miscellaneous",
+  "CIVIL ACTION": "Court Order Deed",
+  "CONTRACT FOR DEED": "Contract for Deed",
+  "CORRECTIVE WARRANTY DEED": "Correction Deed",
+  "COURT ORDERS": "Court Order Deed",
+  DECLARATION: "Miscellaneous",
+  "EXECUTOR DEED": "Personal Representative Deed",
+  "FEE SIMPLE DEED": "Warranty Deed",
+  "FINAL JUDGMENT": "Court Order Deed",
+  GOVERNMENT: "Miscellaneous",
+  "GROUND LEASE": "Miscellaneous",
+  "GUARDIAN DEED": "Guardian's Deed",
+  "MARSHALLS DEED": "Sheriff's Deed",
+  "OCCUPANCY AGREEMENT": "Miscellaneous",
+  "ORDER DETERMINING HOMESTEAD": "Court Order Deed",
+  "ORDER OF TAKING": "Court Order Deed",
+  "PERSONAL REPRESENTATIVES DEED": "Personal Representative Deed",
+  PROBATE: "Court Order Deed",
+  "QUIT CLAIM DEED": "Quitclaim Deed",
+  "REAL ESTATE ESCROW AGREEMENT": "Miscellaneous",
+  "RECEIVERS DEED": "Receiver's Deed",
+  RESOLUTION: "Miscellaneous",
+  "SHERIFF'S DEED": "Sheriff's Deed",
+  "SPECIAL WARRANTY DEED": "Special Warranty Deed",
+  "TAX DEED": "Tax Deed",
+  "TRUSTEES DEED": "Trustee's Deed",
+  "UNIT DEED": "Miscellaneous",
+  "WARRANTY DEED": "Warranty Deed",
+});
+
+// Maps Elephant deed types to available file document_type enums
+const DEED_TYPE_TO_FILE_DOCUMENT_TYPE = Object.freeze({
+  "Administrator's Deed": "ConveyanceDeed",
+  "Assignment of Contract": "ConveyanceDeed",
+  "Bargain and Sale Deed": "ConveyanceDeedBargainAndSaleDeed",
+  "Contract for Deed": "ConveyanceDeed",
+  "Correction Deed": "ConveyanceDeed",
+  "Court Order Deed": "ConveyanceDeed",
+  "Guardian's Deed": "ConveyanceDeed",
+  "Personal Representative Deed": "ConveyanceDeed",
+  "Quitclaim Deed": "ConveyanceDeedQuitClaimDeed",
+  "Receiver's Deed": "ConveyanceDeed",
+  "Sheriff's Deed": "ConveyanceDeed",
+  "Special Warranty Deed": "ConveyanceDeedWarrantyDeed",
+  "Tax Deed": "ConveyanceDeed",
+  "Trustee's Deed": "ConveyanceDeed",
+  "Warranty Deed": "ConveyanceDeedWarrantyDeed",
+});
+
+// Default fallback mapping of deed code abbreviations to Elephant deed types
+const DEFAULT_DEED_CODE_TO_TYPE = Object.freeze({
+  AD: "Administrator's Deed",
+  AF: "Miscellaneous",
+  AG: "Contract for Deed",
+  AC: "Assignment of Contract",
+  CT: "Miscellaneous",
+  CA: "Court Order Deed",
+  CD: "Contract for Deed",
+  CW: "Correction Deed",
+  OR: "Court Order Deed",
+  DE: "Miscellaneous",
+  ED: "Personal Representative Deed",
+  FS: "Warranty Deed",
+  FJ: "Court Order Deed",
+  GO: "Miscellaneous",
+  GL: "Miscellaneous",
+  GD: "Guardian's Deed",
+  MD: "Sheriff's Deed",
+  OA: "Miscellaneous",
+  OH: "Court Order Deed",
+  OT: "Court Order Deed",
+  PR: "Personal Representative Deed",
+  PB: "Court Order Deed",
+  QC: "Quitclaim Deed",
+  EA: "Miscellaneous",
+  RD: "Receiver's Deed",
+  RE: "Miscellaneous",
+  SD: "Sheriff's Deed",
+  SW: "Special Warranty Deed",
+  TD: "Tax Deed",
+  TR: "Trustee's Deed",
+  UD: "Miscellaneous",
+  WD: "Warranty Deed",
+});
+
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
@@ -287,6 +378,67 @@ function toISODate(mdY) {
   const m = mdY.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;
   return `${m[3]}-${m[1]}-${m[2]}`;
+}
+
+function loadDeedCodeToType(mappingPath) {
+  const map = { ...DEFAULT_DEED_CODE_TO_TYPE };
+  let content;
+  try {
+    content = fs.readFileSync(mappingPath, "utf8");
+  } catch (err) {
+    return map;
+  }
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 2) return;
+    const code = parts.pop();
+    const description = parts.join(" ").replace(/\s+/g, " ").trim();
+    if (!code || !description) return;
+    const normalizedCode = code.toUpperCase();
+    const normalizedDescription = description.toUpperCase();
+    let deedType = DEED_DESCRIPTION_TO_ELEPHANT_TYPE[normalizedDescription];
+    if (!deedType) deedType = "Miscellaneous";
+    map[normalizedCode] = deedType;
+  });
+  return map;
+}
+
+function resolveDeedTypeFromCode(code, codeMap) {
+  if (code == null) return null;
+  const normalized = String(code).trim().toUpperCase();
+  if (!normalized) return null;
+  return Object.prototype.hasOwnProperty.call(codeMap, normalized)
+    ? codeMap[normalized]
+    : null;
+}
+
+function mapFileDocumentType(deedType) {
+  if (!deedType) return null;
+  if (
+    Object.prototype.hasOwnProperty.call(DEED_TYPE_TO_FILE_DOCUMENT_TYPE, deedType)
+  ) {
+    return DEED_TYPE_TO_FILE_DOCUMENT_TYPE[deedType];
+  }
+  return /Deed$/i.test(deedType) ? "ConveyanceDeed" : null;
+}
+
+function normalizeDeedUrl(rawUrl) {
+  if (!rawUrl) return null;
+  const trimmed = String(rawUrl).trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  const baseEnv = process.env.HERNANDO_DEED_BASE_URL || null;
+  if (baseEnv) {
+    try {
+      return new URL(trimmed, baseEnv).toString();
+    } catch (_) {
+      // fall through to returning trimmed value
+    }
+  }
+  return trimmed;
 }
 
 // Name normalization helpers to ensure schema compliance for person names
@@ -439,6 +591,9 @@ function main() {
   const utilsPath = path.join("owners", "utilities_data.json");
   const layoutPath = path.join("owners", "layout_data.json");
   const unnorm = readJson("unnormalized_address.json");
+  const deedCodeToType = loadDeedCodeToType(
+    path.join(__dirname, "..", "DeedMapping.txt"),
+  );
 
   let ownersJson = null,
     utilsJson = null,
@@ -829,11 +984,11 @@ function main() {
           if (total != null) {
             writeJson(path.join(dataDir, `tax_${y}.json`), {
               tax_year: y,
-              property_assessed_value_amount: total,
-              property_market_value_amount: total,
+              property_assessed_value_amount: null,
+              property_market_value_amount: null,
               property_building_amount: null,
               property_land_amount: null,
-              property_taxable_value_amount: total,
+              property_taxable_value_amount: null,
               monthly_tax_amount: null,
               period_start_date: null,
               period_end_date: null,
@@ -858,7 +1013,9 @@ function main() {
       const priceStr = $(tds.get(5)).text().trim();
       const deedAbbr = $(tds.get(2)).text().trim();
       const bookPageText = $(tds.get(1)).text().trim();
-      const docUrl = $(tds.get(1)).find("a").attr("href") || null;
+      const docUrl = normalizeDeedUrl(
+        $(tds.get(1)).find("a").attr("href") || null,
+      );
       const grantee = $(tds.get(6)).text().trim();
       const iso = toISODate(dateStr);
       const price = parseCurrencyToNumber(priceStr);
@@ -881,32 +1038,36 @@ function main() {
     });
   });
   salesRows.forEach((row, idx) => {
-    let deed_type = null;
-    if (row.deedAbbr === "WD") deed_type = "Warranty Deed";
-    if (deed_type) {
-      writeJson(path.join(dataDir, `deed_${idx + 1}.json`), { deed_type });
-      const fileRec = {
-        document_type: "ConveyanceDeedWarrantyDeed",
-        file_format: null,
-        name: row.bookPage ? `OR ${row.bookPage}` : null,
-        original_url: row.docUrl || null,
-        ipfs_url: null,
-      };
-      writeJson(path.join(dataDir, `file_${idx + 1}.json`), fileRec);
-    }
-  });
-  salesRows.forEach((row, idx) => {
-    const deedPath = path.join(dataDir, `deed_${idx + 1}.json`);
-    const filePath = path.join(dataDir, `file_${idx + 1}.json`);
+    const deedType = resolveDeedTypeFromCode(row.deedAbbr, deedCodeToType);
+    if (!deedType) return;
+    const deedFileName = `deed_${idx + 1}.json`;
+    const deedPath = path.join(dataDir, deedFileName);
+    writeJson(deedPath, { deed_type: deedType });
+    const fileRec = {
+      document_type: mapFileDocumentType(deedType),
+      file_format: null,
+      name: row.bookPage ? `OR ${row.bookPage}` : null,
+      original_url: row.docUrl || null,
+      ipfs_url: null,
+    };
+    const fileFileName = `file_${idx + 1}.json`;
+    const filePath = path.join(dataDir, fileFileName);
+    writeJson(filePath, fileRec);
     if (fs.existsSync(deedPath) && fs.existsSync(filePath)) {
-      writeJson(path.join(dataDir, `relationship_deed_file_${idx + 1}.json`), {
-        to: { "/": `./deed_${idx + 1}.json` },
-        from: { "/": `./file_${idx + 1}.json` },
-      });
-      writeJson(path.join(dataDir, `relationship_sales_deed_${idx + 1}.json`), {
-        to: { "/": `./sales_${idx + 1}.json` },
-        from: { "/": `./deed_${idx + 1}.json` },
-      });
+      writeJson(
+        path.join(dataDir, `relationship_deed_has_file_${idx + 1}.json`),
+        {
+          from: { "/": `./${deedFileName}` },
+          to: { "/": `./${fileFileName}` },
+        },
+      );
+      writeJson(
+        path.join(dataDir, `relationship_sales_history_has_deed_${idx + 1}.json`),
+        {
+          to: { "/": `./${deedFileName}` },
+          from: { "/": `./sales_${idx + 1}.json` },
+        },
+      );
     }
   });
 
@@ -1021,6 +1182,9 @@ function main() {
   const companyIndex = new Map();
   let personCount = 0;
   let companyCount = 0;
+  let personPropertyRelCount = 0;
+  let companyPropertyRelCount = 0;
+  const propertyRelTarget = { "/": "./property.json" };
   function ensurePerson(p) {
     const norm = normalizePersonFields(p || {});
     const key = JSON.stringify({
@@ -1062,10 +1226,40 @@ function main() {
     const ob = ownersJson[propertyKey].owners_by_date;
     const current = ob.current || [];
     current.forEach((o) => {
-      if (o.type === "person") ensurePerson(o);
-      else if (o.type === "company") ensureCompany(o);
+      if (o.type === "person") {
+        const pFile = ensurePerson(o);
+        personPropertyRelCount += 1;
+        writeJson(
+          path.join(
+            dataDir,
+            `relationship_person_has_property_${personPropertyRelCount}.json`,
+          ),
+          {
+            from: { "/": `./${pFile}` },
+            to: propertyRelTarget,
+          },
+        );
+      } else if (o.type === "company") {
+        const cFile = ensureCompany(o);
+        companyPropertyRelCount += 1;
+        writeJson(
+          path.join(
+            dataDir,
+            `relationship_company_has_property_${companyPropertyRelCount}.json`,
+          ),
+          {
+            from: { "/": `./${cFile}` },
+            to: propertyRelTarget,
+          },
+        );
+      }
     });
+    const latestSaleDate = salesRows
+      .map((row) => row.date)
+      .filter(Boolean)
+      .reduce((max, date) => (!max || date > max ? date : max), null);
     salesRows.forEach((row, idx) => {
+      if (latestSaleDate && row.date === latestSaleDate) return;
       const buyers = ob[row.date] || [];
       buyers.forEach((b) => {
         if (b.type === "person") {
@@ -1073,11 +1267,11 @@ function main() {
           writeJson(
             path.join(
               dataDir,
-              `relationship_sales_person_${idx + 1}_${pFile.replace(/\D/g, "")}.json`,
+              `relationship_sales_history_has_person_${idx + 1}_${pFile.replace(/\D/g, "")}.json`,
             ),
             {
-              to: { "/": `./${pFile}` },
               from: { "/": `./sales_${idx + 1}.json` },
+              to: { "/": `./${pFile}` },
             },
           );
         } else if (b.type === "company") {
@@ -1085,11 +1279,11 @@ function main() {
           writeJson(
             path.join(
               dataDir,
-              `relationship_sales_company_${idx + 1}_${cFile.replace(/\D/g, "")}.json`,
+              `relationship_sales_history_has_company_${idx + 1}_${cFile.replace(/\D/g, "")}.json`,
             ),
             {
-              to: { "/": `./${cFile}` },
               from: { "/": `./sales_${idx + 1}.json` },
+              to: { "/": `./${cFile}` },
             },
           );
         }
