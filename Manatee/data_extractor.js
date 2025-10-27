@@ -2191,6 +2191,7 @@ function main() {
 
   // Layout extraction from owners/layout_data.json
   if (layoutData) {
+    let layoutBuildingMap = {};
     const key =
       parcel && parcel.parcel_identifier
         ? `property_${parcel.parcel_identifier}`
@@ -2249,10 +2250,22 @@ function main() {
         total_area_sq_ft: l.total_area_sq_ft ?? null,
       };
       writeOut(`layout_${idx}.json`, layoutOut);
+      if (l.space_type === "Building") {
+        const building_number = l.building_number;
+        layoutBuildingMap[building_number.toString()] = idx;
+      }
+      if (l.space_type === "Floor") {
+        const building_number = l.building_number;
+        const building_layout_number = layoutBuildingMap[building_number.toString()];
+        writeOut(`relationship_layout_${building_layout_number}_to_layout_${idx}.json`, {
+                  to: { "/": `layout_${idx}.json` },
+                  from: { "/": `layout_${building_layout_number}.json` },
+        },);
+      }
       if (util && l.space_type === "Building") {
         if (l.building_number && l.building_number.toString() in util) {
           writeOut(`utility_${idx}.json`, util[l.building_number.toString()]);
-          writeOut(`layout_to_utility_${idx}.json`, {
+          writeOut(`relationship_layout_to_utility_${idx}.json`, {
                     to: { "/": `utility_${idx}.json` },
                     from: { "/": `layout_${idx}.json` },
           },);
@@ -2261,7 +2274,7 @@ function main() {
       if (struct && l.space_type === "Building") {
         if (l.building_number && l.building_number.toString() in struct) {
           writeOut(`structure_${idx}.json`, struct[l.building_number.toString()]);
-          writeOut(`layout_to_structure_${idx}.json`, {
+          writeOut(`relationship_layout_to_structure_${idx}.json`, {
                     to: { "/": `structure_${idx}.json` },
                     from: { "/": `layout_${idx}.json` },
           },);
