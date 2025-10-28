@@ -354,6 +354,12 @@ function readJson(p) {
 function writeJson(p, obj) {
   fs.writeFileSync(p, JSON.stringify(obj, null, 2));
 }
+function writeRelationship(filePath, fromCid, toCid) {
+  writeJson(filePath, {
+    from: { "/": fromCid },
+    to: { "/": toCid },
+  });
+}
 function errEnum(value, cls, prop) {
   throw new Error(
     JSON.stringify({
@@ -1031,6 +1037,16 @@ function main() {
       }
     }
   });
+  const newestSaleIdx =
+    salesRows.length > 0
+      ? salesRows.reduce((acc, row, idx) => {
+          if (!row.date) return acc;
+          if (acc === null) return idx;
+          const accDate = salesRows[acc] && salesRows[acc].date;
+          if (!accDate) return idx;
+          return row.date > accDate ? idx : acc;
+        }, null)
+      : null;
   salesRows.forEach((row, idx) => {
     writeJson(path.join(dataDir, `sales_${idx + 1}.json`), {
       ownership_transfer_date: row.date,
@@ -1054,19 +1070,15 @@ function main() {
     const filePath = path.join(dataDir, fileFileName);
     writeJson(filePath, fileRec);
     if (fs.existsSync(deedPath) && fs.existsSync(filePath)) {
-      writeJson(
+      writeRelationship(
         path.join(dataDir, `relationship_deed_has_file_${idx + 1}.json`),
-        {
-          from: { "/": `./${deedFileName}` },
-          to: { "/": `./${fileFileName}` },
-        },
+        `./${deedFileName}`,
+        `./${fileFileName}`,
       );
-      writeJson(
+      writeRelationship(
         path.join(dataDir, `relationship_sales_history_has_deed_${idx + 1}.json`),
-        {
-          to: { "/": `./${deedFileName}` },
-          from: { "/": `./sales_${idx + 1}.json` },
-        },
+        `./sales_${idx + 1}.json`,
+        `./${deedFileName}`,
       );
     }
   });
@@ -1074,14 +1086,17 @@ function main() {
   // UTILITIES / LAYOUTS
   if (utilsJson && utilsJson[propertyKey])
     writeJson(path.join(dataDir, "utility.json"), utilsJson[propertyKey]);
+  const layoutFiles = [];
   if (
     layoutJson &&
     layoutJson[propertyKey] &&
     Array.isArray(layoutJson[propertyKey].layouts)
   )
-    layoutJson[propertyKey].layouts.forEach((lay, i) =>
-      writeJson(path.join(dataDir, `layout_${i + 1}.json`), lay),
-    );
+    layoutJson[propertyKey].layouts.forEach((lay, i) => {
+      const fname = `layout_${i + 1}.json`;
+      writeJson(path.join(dataDir, fname), lay);
+      layoutFiles.push({ fileName: fname, data: lay });
+    });
 
   // STRUCTURE
   const structureReq = {
@@ -1147,6 +1162,53 @@ function main() {
     }),
   );
 
+  // LAYOUT RELATIONSHIPS
+  const isVacantLand =
+    (build_status && build_status === "VacantLand") ||
+    property_type === "LandParcel";
+  if (!isVacantLand && layoutFiles.length) {
+    const buildingEntry =
+      layoutFiles.find((entry) => {
+        const spaceType = (entry.data && entry.data.space_type) || "";
+        return spaceType.toLowerCase() === "building";
+      }) || layoutFiles[0];
+    const buildingCid = `./${buildingEntry.fileName}`;
+    if (fs.existsSync(path.join(dataDir, "property.json"))) {
+      writeRelationship(
+        path.join(dataDir, "relationship_property_has_layout_building.json"),
+        "./property.json",
+        buildingCid,
+      );
+    }
+    if (fs.existsSync(path.join(dataDir, "structure.json"))) {
+      writeRelationship(
+        path.join(dataDir, "relationship_layout_building_has_structure.json"),
+        buildingCid,
+        "./structure.json",
+      );
+    }
+    if (fs.existsSync(path.join(dataDir, "utility.json"))) {
+      writeRelationship(
+        path.join(dataDir, "relationship_layout_building_has_utility.json"),
+        buildingCid,
+        "./utility.json",
+      );
+    }
+    let layoutRelIndex = 0;
+    layoutFiles.forEach((entry) => {
+      if (entry.fileName === buildingEntry.fileName) return;
+      layoutRelIndex += 1;
+      writeRelationship(
+        path.join(
+          dataDir,
+          `relationship_layout_building_has_layout_${layoutRelIndex}.json`,
+        ),
+        buildingCid,
+        `./${entry.fileName}`,
+      );
+    });
+  }
+
   // LOT
   let lotSqft = null;
   $("#MainContent_frmParcelDetail_gvLands tbody tr").each((i, tr) => {
@@ -1178,13 +1240,42 @@ function main() {
   });
 
   // OWNERS/BUYERS + RELS
+  function ownerEntityKey(entity) {
+    if (!entity || !entity.type) return null;
+    if (entity.type === "person") {
+      const norm = normalizePersonFields(entity);
+      return [
+        "person",
+        norm.first_name || "",
+        norm.middle_name || "",
+        norm.last_name || "",
+        norm.suffix_name || "",
+      ]
+        .map((part) => String(part).toLowerCase())
+        .join(":");
+    }
+    if (entity.type === "company") {
+      return ["company", (entity.name || "").trim().toLowerCase()].join(":");
+    }
+    return null;
+  }
+  function mergeUniqueEntities(...lists) {
+    const seen = new Set();
+    const merged = [];
+    lists.forEach((list) => {
+      (Array.isArray(list) ? list : []).forEach((entity) => {
+        const key = ownerEntityKey(entity);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        merged.push(entity);
+      });
+    });
+    return merged;
+  }
   const personIndex = new Map();
   const companyIndex = new Map();
   let personCount = 0;
   let companyCount = 0;
-  let personPropertyRelCount = 0;
-  let companyPropertyRelCount = 0;
-  const propertyRelTarget = { "/": "./property.json" };
   function ensurePerson(p) {
     const norm = normalizePersonFields(p || {});
     const key = JSON.stringify({
@@ -1224,67 +1315,41 @@ function main() {
     ownersJson[propertyKey].owners_by_date
   ) {
     const ob = ownersJson[propertyKey].owners_by_date;
-    const current = ob.current || [];
+    const current = Array.isArray(ob.current) ? ob.current : [];
     current.forEach((o) => {
-      if (o.type === "person") {
-        const pFile = ensurePerson(o);
-        personPropertyRelCount += 1;
-        writeJson(
-          path.join(
-            dataDir,
-            `relationship_person_has_property_${personPropertyRelCount}.json`,
-          ),
-          {
-            from: { "/": `./${pFile}` },
-            to: propertyRelTarget,
-          },
-        );
-      } else if (o.type === "company") {
-        const cFile = ensureCompany(o);
-        companyPropertyRelCount += 1;
-        writeJson(
-          path.join(
-            dataDir,
-            `relationship_company_has_property_${companyPropertyRelCount}.json`,
-          ),
-          {
-            from: { "/": `./${cFile}` },
-            to: propertyRelTarget,
-          },
-        );
-      }
+      if (o.type === "person") ensurePerson(o);
+      else if (o.type === "company") ensureCompany(o);
     });
-    const latestSaleDate = salesRows
-      .map((row) => row.date)
-      .filter(Boolean)
-      .reduce((max, date) => (!max || date > max ? date : max), null);
+    const latestIdx =
+      typeof newestSaleIdx === "number" ? newestSaleIdx : null;
     salesRows.forEach((row, idx) => {
-      if (latestSaleDate && row.date === latestSaleDate) return;
-      const buyers = ob[row.date] || [];
+      const historicalBuyers = Array.isArray(ob[row.date])
+        ? ob[row.date]
+        : [];
+      const buyers =
+        latestIdx !== null && idx === latestIdx && current.length
+          ? mergeUniqueEntities(current)
+          : historicalBuyers;
       buyers.forEach((b) => {
         if (b.type === "person") {
           const pFile = ensurePerson(b);
-          writeJson(
+          writeRelationship(
             path.join(
               dataDir,
               `relationship_sales_history_has_person_${idx + 1}_${pFile.replace(/\D/g, "")}.json`,
             ),
-            {
-              from: { "/": `./sales_${idx + 1}.json` },
-              to: { "/": `./${pFile}` },
-            },
+            `./sales_${idx + 1}.json`,
+            `./${pFile}`,
           );
         } else if (b.type === "company") {
           const cFile = ensureCompany(b);
-          writeJson(
+          writeRelationship(
             path.join(
               dataDir,
               `relationship_sales_history_has_company_${idx + 1}_${cFile.replace(/\D/g, "")}.json`,
             ),
-            {
-              from: { "/": `./sales_${idx + 1}.json` },
-              to: { "/": `./${cFile}` },
-            },
+            `./sales_${idx + 1}.json`,
+            `./${cFile}`,
           );
         }
       });
