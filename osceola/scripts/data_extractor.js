@@ -1,259 +1,173 @@
+#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
-const cheerio = require("cheerio");
 
-function readJSON(p) {
+function readJson(p) {
   try {
-    return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch (e) {
+    const raw = fs.readFileSync(p, "utf8");
+    return JSON.parse(raw);
+  } catch {
     return null;
   }
 }
 
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
-function parseCurrencyToNumber(text) {
-  if (!text) return null;
-  const cleaned = String(text).replace(/[^0-9.\-]/g, "");
-  if (cleaned === "") return null;
-  const num = Number(cleaned);
-  return isNaN(num) ? null : num;
-}
-
-function parseISODate(mdY) {
-  if (!mdY) return null;
-  const m = String(mdY)
-    .trim()
-    .match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return null;
-  const [_, mm, dd, yyyy] = m;
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function mapDeedType(raw) {
-  if (!raw) return null;
-  const s = raw.trim().toUpperCase();
-  const map = {
-    "SPECIAL WARRANTY DEED": "Special Warranty Deed",
-    "WARRANTY DEED": "Warranty Deed",
-    "QUIT CLAIM DEED": "Quitclaim Deed",
-    "QUITCLAIM DEED": "Quitclaim Deed",
-    "CORRECTIVE DEED": "Correction Deed",
-    "CORRECTION DEED": "Correction Deed",
-    "GRANT DEED": "Grant Deed",
-    "BARGAIN AND SALE DEED": "Bargain and Sale Deed",
-    "LADY BIRD DEED": "Lady Bird Deed",
-    "TRUSTEE'S DEED": "Trustee's Deed",
-    "TAX DEED": "Tax Deed",
-    "PERSONAL REPRESENTATIVE DEED": "Personal Representative Deed",
-  };
-  if (map[s]) return map[s];
-  return null;
-}
-
-function normalizeSuffix(s) {
-  if (!s) return null;
-  const map = {
-    ALY: "Aly",
-    AVE: "Ave",
-    AV: "Ave",
-    BLVD: "Blvd",
-    BND: "Bnd",
-    CIR: "Cir",
-    CIRS: "Cirs",
-    CRK: "Crk",
-    CT: "Ct",
-    CTR: "Ctr",
-    CTRS: "Ctrs",
-    CV: "Cv",
-    CYN: "Cyn",
-    DR: "Dr",
-    DRS: "Drs",
-    EXPY: "Expy",
-    FWY: "Fwy",
-    GRN: "Grn",
-    GRNS: "Grns",
-    GRV: "Grv",
-    GRVS: "Grvs",
-    HWY: "Hwy",
-    HL: "Hl",
-    HLS: "Hls",
-    HOLW: "Holw",
-    JCT: "Jct",
-    JCTS: "Jcts",
-    LN: "Ln",
-    LOOP: "Loop",
-    MALL: "Mall",
-    MDW: "Mdw",
-    MDWS: "Mdws",
-    MEWS: "Mews",
-    ML: "Ml",
-    MNRS: "Mnrs",
-    MT: "Mt",
-    MTN: "Mtn",
-    MTNS: "Mtns",
-    OPAS: "Opas",
-    ORCH: "Orch",
-    OVAL: "Oval",
-    PARK: "Park",
-    PASS: "Pass",
-    PATH: "Path",
-    PIKE: "Pike",
-    PL: "Pl",
-    PLN: "Pln",
-    PLNS: "Plns",
-    PLZ: "Plz",
-    PT: "Pt",
-    PTS: "Pts",
-    PNE: "Pne",
-    PNES: "Pnes",
-    RADL: "Radl",
-    RD: "Rd",
-    RDG: "Rdg",
-    RDGS: "Rdgs",
-    RIV: "Riv",
-    ROW: "Row",
-    RTE: "Rte",
-    RUN: "Run",
-    SHL: "Shl",
-    SHLS: "Shls",
-    SHR: "Shr",
-    SHRS: "Shrs",
-    SMT: "Smt",
-    SQ: "Sq",
-    SQS: "Sqs",
-    ST: "St",
-    STA: "Sta",
-    STRA: "Stra",
-    STRM: "Strm",
-    TER: "Ter",
-    TPKE: "Tpke",
-    TRL: "Trl",
-    TRCE: "Trce",
-    UN: "Un",
-    VIS: "Vis",
-    VLY: "Vly",
-    VLYS: "Vlys",
-    VIA: "Via",
-    VL: "Vl",
-    VLGS: "Vlgs",
-    VWS: "Vws",
-    WALK: "Walk",
-    WALL: "Wall",
-    WAY: "Way",
-  };
-  const key = s.toUpperCase().trim();
-  if (map[key]) return map[key];
-  return null;
-}
-
-function isNumeric(value) {
-    return /^-?\d+$/.test(value);
-}
-
-function attemptWriteAddress(unnorm) {
-  const full =
-    unnorm && unnorm.full_address ? unnorm.full_address.trim() : null;
-  if (!full) return;
-  let city = null;
-  let zip = null;
-  const fullAddressParts = (full || "").split(",");
-  if (fullAddressParts.length >= 3 && fullAddressParts[2]) {
-    state_and_pin = fullAddressParts[2].split(/\s+/);
-    if (state_and_pin.length >= 1 && state_and_pin[state_and_pin.length - 1] && state_and_pin[state_and_pin.length - 1].trim().match(/^\d{5}$/)) {
-      zip = state_and_pin[state_and_pin.length - 1].trim();
-      city = fullAddressParts[1].trim();
-    }
+function cleanText(str) {
+  if (str == null) return null;
+  try {
+    const $ = cheerio.load(String(str));
+    return $.text().trim() || null;
+  } catch (e) {
+    return String(str);
   }
-  const parts = (fullAddressParts[0] || "").split(/\s+/);
-  let street_number = null;
-  if (parts && parts.length > 1) {
-    street_number_candidate = parts[0];
-    if ((street_number_candidate || "") && isNumeric(street_number_candidate)) {
-      street_number = parts.shift() || null;
-    }
-  }
-  let suffix = null;
-  if (parts && parts.length > 1) {
-    suffix_candidate = parts[parts.length - 1];
-    if (normalizeSuffix(suffix_candidate)) {
-      suffix = parts.pop() || null;
-    }
-  }
-  let street_name = parts.join(" ") || null;
-  if (street_name) {
-    street_name = street_name.replace(/\b(E|N|NE|NW|S|SE|SW|W)\b/g, "");
-  }
-  // const m = full.match(
-  //   /^(\d+)\s+([^,]+),\s*([^,]+),\s*([A-Z]{2})\s*(\d{5})(?:-(\d{4}))?$/i,
-  // );
-  // if (!m) return;
-  // const [, streetNumber, streetRest, city, state, zip, plus4] = m;
+}
 
-  // let street_name = streetRest.trim();
-  // let route_number = null;
-  // let street_suffix_type = null;
-  // const m2 = streetRest.trim().match(/^([A-Za-z]+)\s+(\d+)$/);
-  // if (m2) {
-  //   street_name = m2[1].toUpperCase();
-  //   route_number = m2[2];
-  //   if (street_name === "HWY" || street_name === "HIGHWAY")
-  //     street_suffix_type = "Hwy";
-  // }
-  const city_name = city ? city.toUpperCase() : null;
-  // const state_code = state.toUpperCase();
-  const postal_code = zip;
-  // const plus_four_postal_code = plus4 || null;
+function ensureDirSync(p) {
+  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+}
 
-  // Per evaluator expectation, set county_name from input jurisdiction
-  const inputCounty = (unnorm.county_jurisdiction || "").trim();
+function toDateOnly(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function trimStr(val) {
+  return typeof val === "string" ? val.trim() : val;
+}
+
+function numOrNull(n) {
+  return n === null || n === undefined || Number.isNaN(Number(n))
+    ? null
+    : Number(n);
+}
+
+function writeJSON(p, obj) {
+  ensureDirSync(path.dirname(p));
+  fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf8");
+}
+
+function extractAddress(parcelInfo, unnorm) {
+  let hasOwnerMailingAddress = false;
+  let inputCounty = (unnorm.county_jurisdiction || "").trim();
+  if (!inputCounty) {
+    inputCounty = (unnorm.county_name || "").trim();
+  }
   const county_name = inputCounty || null;
-
-  const address = {
-    city_name,
-    country_code: "US",
-    county_name,
-    latitude: unnorm && unnorm.latitude ? unnorm.latitude : null,
-    longitude: unnorm && unnorm.longitude ? unnorm.longitude : null,
-    plus_four_postal_code: null,
-    postal_code,
-    state_code: "FL",
-    street_name: street_name,
-    street_post_directional_text: null,
-    street_pre_directional_text: null,
-    street_number: street_number,
-    street_suffix_type: normalizeSuffix(suffix),
-    unit_identifier: null,
-    route_number: null,
-    township: null,
-    range: null,
-    section: null,
-    block: null,
-    lot: null,
-    municipality_name: null,
-  };
-  fs.writeFileSync(
-    path.join("data", "address.json"),
-    JSON.stringify(address, null, 2),
-  );
+  const mailingAddress = parcelInfo["Mailing"];
+  const siteAddress = parcelInfo["Situs"];
+  if (mailingAddress) {
+    const mailingAddressObj = {
+      latitude: null,
+      longitude: null,
+      unnormalized_address: mailingAddress,
+    };
+    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
+    hasOwnerMailingAddress = true;
+  }
+  if (siteAddress) {
+    const latitude = parcelInfo["lat"] ? parcelInfo["lat"] : (unnorm && unnorm.latitude ? unnorm.latitude : null);
+    const longitude = parcelInfo["lon"] ? parcelInfo["lon"] : (unnorm && unnorm.longitude ? unnorm.longitude : null);
+    const addressObj = {
+      county_name,
+      latitude: latitude,
+      longitude: longitude,
+      unnormalized_address: siteAddress,
+    };
+    writeJSON(path.join("data", "address.json"), addressObj);
+    writeJSON(path.join("data", "relationship_property_has_address.json"), {
+                to: { "/": `./address.json` },
+                from: { "/": `./property.json` },
+              });
+  }
+  return hasOwnerMailingAddress;
 }
 
-function mapPropertyTypeFromUseCode(code) {
-  if (!code) return null;
-  const u = code.toUpperCase();
-  if (u.includes("0311") || u.includes("0312") || u.includes("1003")) return "MultiFamilyMoreThan10";
-  if (u.includes("0811")) return "MultiFamilyLessThan10";
-  if (u.includes("0313")) return "MultipleFamily";
-  if (u.includes("0111")) return "SingleFamily";
-  if (u.includes("0401") || u.includes("0411") || u.includes("1004")) return "Condominium";
-  if (u.includes("0001") || u.includes("0011")) return "VacantLand";
-  if (u.includes("0490") || u.includes("0491") || u.includes("0492") || u.includes("0493")) return "Timeshare";
-  if (u.includes("0316") || u.includes("0341") || u.includes("0342") || u.includes("0343")) return "Apartment";
-  if (u.includes("0211")) return "MobileHome";
-  if (u.includes("0611") || u.includes("1006")) return "Retirement";
-  if (u.includes("0711")) return "MiscellaneousResidential";
+function mapPropertyType(dorDesc, nbcDesc) {
+  const d = (dorDesc || "").toUpperCase();
+  const n = (nbcDesc || "").toUpperCase();
+  if (d.includes("MULTI-FAMILY") && (d.includes("10") || d.includes("50"))) {
+    return "MultiFamilyMoreThan10";
+  }
+  if (n.includes("APARTMENTS")) return "Apartment";
+  // If still unknown, throw per instruction
+  throw {
+    type: "error",
+    message: `Unknown enum value ${dorDesc || nbcDesc}.`,
+    path: "property.property_type",
+  };
+}
+
+function mapUsageType(jurisdesc) {
+  const j = (jurisdesc || "").toUpperCase();
+  if (j.includes("COMMERCIAL")) return "Commercial";
+  return null;
+}
+
+function mapDeedType(trns_cd, trans_dscr) {
+  const code = (trns_cd || "").toUpperCase();
+  const dscr = (trans_dscr || "").toUpperCase();
+  // Check more specific strings first to avoid substring collisions
+  if (code === "SW" || dscr.includes("SPECIAL WARRANTY DEED"))
+    return "Special Warranty Deed";
+  if (
+    code === "WD" ||
+    (dscr.includes("WARRANTY DEED") && !dscr.includes("SPECIAL WARRANTY DEED"))
+  )
+    return "Warranty Deed";
+  if (code === "QC" || dscr.includes("QUIT CLAIM DEED"))
+    return "Quitclaim Deed";
+  if (
+    code === "CD" ||
+    dscr.includes("CORRECTIVE DEED") ||
+    dscr.includes("CORRECTION DEED")
+  )
+    return "Correction Deed";
+  return "Miscellaneous";
+}
+
+function mapExteriorWallAndFraming(structRows) {
+  // Defaults
+  let exteriorWall = null;
+  let primaryFrame = null;
+  for (const r of structRows) {
+    const tp = (r.tp_dscr || "").toUpperCase();
+    const cd = (r.cd_dscr || "").toUpperCase();
+    if (tp === "EXTERIOR WALL") {
+      if (cd.includes("CONCRETE BLOCK STUCCO")) {
+        exteriorWall = exteriorWall || "Stucco"; // cladding
+        primaryFrame = primaryFrame || "Concrete Block";
+      } else if (cd.includes("FRAME STUCCO")) {
+        exteriorWall = exteriorWall || "Stucco";
+        primaryFrame = primaryFrame || "Wood Frame";
+      } else if (cd.includes("CONCRETE BLOCK")) {
+        // If mentioned without stucco
+        primaryFrame = primaryFrame || "Concrete Block";
+      } else if (cd.includes("STUCCO")) {
+        exteriorWall = exteriorWall || "Stucco";
+      }
+    }
+  }
+  return { exteriorWall, primaryFrame };
+}
+let people = [];
+let companies = [];
+
+function findPersonIndexByName(first, last) {
+  const tf = titleCaseName(first);
+  const tl = titleCaseName(last);
+  for (let i = 0; i < people.length; i++) {
+    if (people[i].first_name === tf && people[i].last_name === tl)
+      return i + 1;
+  }
+  return null;
+}
+
+function findCompanyIndexByName(name) {
+  const tn = (name || "").trim().toUpperCase();
+  for (let i = 0; i < companies.length; i++) {
+    if ((companies[i].name || "").trim() === tn) return i + 1;
+  }
   return null;
 }
 
@@ -266,11 +180,7 @@ function titleCaseName(s) {
     .join(" ");
 }
 
-function writePersonCompaniesSalesRelationships(parcelId, sales) {
-  const owners = readJSON(path.join("owners", "owner_data.json"));
-  if (!owners) return;
-  const key = `property_${parcelId}`;
-  const record = owners[key];
+function writePersonCompaniesSalesRelationships(record, sales, hasOwnerMailingAddress) {
   if (!record || !record.owners_by_date) return;
   const ownersByDate = record.owners_by_date;
   const personMap = new Map();
@@ -304,52 +214,26 @@ function writePersonCompaniesSalesRelationships(parcelId, sales) {
     request_identifier: parcelId,
   }));
   people.forEach((p, idx) => {
-    fs.writeFileSync(
-      path.join("data", `person_${idx + 1}.json`),
-      JSON.stringify(p, null, 2),
-    );
+    writeJSON(path.join("data", `person_${idx + 1}.json`), p);
   });
   const companyNames = new Set();
   Object.values(ownersByDate).forEach((arr) => {
     (arr || []).forEach((o) => {
       if (o.type === "company" && (o.name || "").trim())
-        companyNames.add((o.name || "").trim());
+        companyNames.add((o.name || "").trim().toUpperCase());
     });
   });
   companies = Array.from(companyNames).map((n) => ({ 
     name: n,
-    request_identifier: parcelId,
   }));
   companies.forEach((c, idx) => {
-    fs.writeFileSync(
-      path.join("data", `company_${idx + 1}.json`),
-      JSON.stringify(c, null, 2),
-    );
+    writeJSON(path.join("data", `company_${idx + 1}.json`), c);
   });
   // Relationships: link sale to owners present on that date (both persons and companies)
   let relPersonCounter = 0;
   let relCompanyCounter = 0;
-
-  function findPersonIndexByName(first, last) {
-    const tf = titleCaseName(first);
-    const tl = titleCaseName(last);
-    for (let i = 0; i < people.length; i++) {
-      if (people[i].first_name === tf && people[i].last_name === tl)
-        return i + 1;
-    }
-    return null;
-  }
-
-  function findCompanyIndexByName(name) {
-    const tn = (name || "").trim();
-    for (let i = 0; i < companies.length; i++) {
-      if ((companies[i].name || "").trim() === tn) return i + 1;
-    }
-    return null;
-  }
-
   sales.forEach((rec, idx) => {
-    const d = rec.date;
+    const d = toDateOnly(rec.dos);
     const ownersOnDate = ownersByDate[d] || [];
     ownersOnDate
       .filter((o) => o.type === "person")
@@ -357,15 +241,15 @@ function writePersonCompaniesSalesRelationships(parcelId, sales) {
         const pIdx = findPersonIndexByName(o.first_name, o.last_name);
         if (pIdx) {
           relPersonCounter++;
-          fs.writeFileSync(
+          writeJSON(
             path.join(
-                    "data",
-                    `relationship_sales_person_${relPersonCounter}.json`,
-                  ),
-            JSON.stringify({
-                    to: { "/": `./person_${pIdx}.json` },
-                    from: { "/": `./sales_${idx + 1}.json` },
-                  }, null, 2),
+              "data",
+              `relationship_sales_person_${relPersonCounter}.json`,
+            ),
+            {
+              to: { "/": `./person_${pIdx}.json` },
+              from: { "/": `./sales_${idx + 1}.json` },
+            },
           );
         }
       });
@@ -375,364 +259,437 @@ function writePersonCompaniesSalesRelationships(parcelId, sales) {
         const cIdx = findCompanyIndexByName(o.name);
         if (cIdx) {
           relCompanyCounter++;
-          fs.writeFileSync(
+          writeJSON(
             path.join(
-                    "data",
-                    `relationship_sales_company_${relCompanyCounter}.json`,
-                  ),
-            JSON.stringify({
+              "data",
+              `relationship_sales_company_${relCompanyCounter}.json`,
+            ),
+            {
               to: { "/": `./company_${cIdx}.json` },
               from: { "/": `./sales_${idx + 1}.json` },
-                  }, null, 2),
+            },
           );
         }
       });
   });
+  if (hasOwnerMailingAddress) {
+    const currentOwner = ownersByDate["current"] || [];
+    relPersonCounter = 0;
+    relCompanyCounter = 0;
+    currentOwner
+    .filter((o) => o.type === "person")
+    .forEach((o) => {
+      const pIdx = findPersonIndexByName(o.first_name, o.last_name);
+      if (pIdx) {
+        relPersonCounter++;
+        writeJSON(
+          path.join(
+            "data",
+            `relationship_person_has_mailing_address_${relPersonCounter}.json`,
+          ),
+          {
+            from: { "/": `./person_${pIdx}.json` },
+            to: { "/": `./mailing_address.json` },
+          },
+        );
+      }
+    });
+    currentOwner
+    .filter((o) => o.type === "company")
+    .forEach((o) => {
+      const cIdx = findCompanyIndexByName(o.name);
+      if (cIdx) {
+        relCompanyCounter++;
+        writeJSON(
+          path.join(
+            "data",
+            `relationship_company_has_mailing_address_${relCompanyCounter}.json`,
+          ),
+          {
+            from: { "/": `./company_${cIdx}.json` },
+            to: { "/": `./mailing_address.json` },
+          },
+        );
+      }
+    });
+  }
 }
 
 function main() {
-  const INPUT_HTML = path.resolve("input.html");
-  const ADDR_JSON = path.resolve("unnormalized_address.json");
-  const SEED_JSON = path.resolve("property_seed.json");
-  const OWNER_JSON = path.resolve("owners/owner_data.json");
-  const UTIL_JSON = path.resolve("owners/utilities_data.json");
-  const LAYOUT_JSON = path.resolve("owners/layout_data.json");
-  const STRUCTURE_JSON = path.resolve("owners", "structure_data.json");
+  const dataDir = path.join("data");
+  ensureDirSync(dataDir);
 
-  const outDir = path.resolve("data");
-  ensureDir(outDir);
+  // Read inputs
+  const inputPath = "input.json";
+  const addressPath = "address.json";
+  const unnormalizedPath = "unnormalized_address.json"
+  const parcelPath = "parcel.json";
+  const ownersDir = "owners";
+  const ownerDataPath = path.join(ownersDir, "owner_data.json");
+  const utilitiesDataPath = path.join(ownersDir, "utilities_data.json");
+  const layoutDataPath = path.join(ownersDir, "layout_data.json");
+  const structureDataPath = path.join(ownersDir, "structure_data.json");
 
-  const html = fs.readFileSync(INPUT_HTML, "utf8");
-  const $ = cheerio.load(html);
-
-  const unAddr = readJSON(ADDR_JSON) || {};
-  const seed = readJSON(SEED_JSON) || {};
-  const ownerData = readJSON(OWNER_JSON) || {};
-  const utilData = readJSON(UTIL_JSON) || {};
-  const layoutData = readJSON(LAYOUT_JSON) || {};
-  const structureData = readJSON(STRUCTURE_JSON) || {};
-
-  const parcelId =
-    (seed && (seed.parcel_id || seed.request_identifier)) ||
-    $("#stu").val() ||
-    null;
-
-  // PROPERTY
-  let legalDesc = null;
-  const ldescEl = $(".lDesc").first();
-  if (ldescEl && ldescEl.text()) {
-    const t = ldescEl.text().trim();
-    const m = t.match(/Legal Description:\s*(.*)$/i);
-    legalDesc = m
-      ? m[1].trim()
-      : t.replace(/^Legal Description:\s*/i, "").trim();
+  const input = readJson(inputPath);
+  let address = readJson(addressPath);
+  if (!address) {
+    address = readJson(unnormalizedPath);
   }
-  // Subdivision from results grid cell or property card
-  let subdivision = null;
-  const subCell = $(
-    'td[data-transpose="SubDivision"], td[data-field="subName"]',
-  ).first();
-  if (subCell && subCell.text()) subdivision = subCell.text().trim();
-
-  // Primary use mapping to property_type
-  let primaryUse = null;
-  const primaryUseEl = $(".DORDesc").first();
-  if (primaryUseEl && primaryUseEl.text()) {
-    const m = primaryUseEl.text().match(/Primary Use:\s*(.*)$/i);
-    primaryUse = m ? m[1].trim() : primaryUseEl.text().trim();
+  if (!address) {
+    throw new Error("Address file not found");
   }
-  let property_type = mapPropertyTypeFromUseCode(primaryUse);
-  if (!property_type) {
-    throw {
-      type: "error",
-      message: `Unknown enum value ${useCode}.`,
-      path: "property.property_type",
-    };
-  }
-  // let property_type = "Apartment";
-  // if (primaryUse) {
-  //   const pu = primaryUse.toUpperCase();
-  //   if (pu.includes("MULTI-FAMILY")) {
-  //     property_type = "MultiFamilyMoreThan10";
-  //   }
-  //   if (pu.includes("CONDOMINIUM")) {
-  //     property_type = "Apartment";
-  //   }
-  // }
-
-  // Year Built: pick earliest from buildings section rows labeled "Year Built:"
-  let builtYears = [];
-  $("div.row.mt-1").each((i, el) => {
-    const label = $(el).find("strong").first().text().trim();
-    if (/Year Built:/i.test(label)) {
-      const val = $(el).find("span").last().text().trim();
-      const y = parseInt(val, 10);
-      if (!isNaN(y)) builtYears.push(y);
-    }
-  });
-  const propBuiltYear = builtYears.length ? Math.min(...builtYears) : null;
-
-  // number_of_units from Property Name or Land table
-  let number_of_units = null;
-  const propNameEl = $(".Property_name").first();
-  if (propNameEl && propNameEl.text()) {
-    const t = propNameEl.text();
-    const m = t.match(/\((\d+)\s*UNITS?\)/i);
-    if (m) number_of_units = parseInt(m[1], 10);
-  }
-  if (number_of_units == null) {
-    $("#lndVals tbody tr").each((i, tr) => {
-      const tds = $(tr).find("td");
-      const ut = $(tds[1]).text().trim();
-      const n = parseInt(ut, 10);
-      if (!isNaN(n)) number_of_units = n;
-    });
-  }
-
-  const property = {
-    area_under_air: null,
-    historic_designation: false,
-    livable_floor_area: null,
-    number_of_units: number_of_units != null ? number_of_units : null,
-    number_of_units_type: null,
-    parcel_identifier: parcelId || $("#stu").val() || "",
-    property_effective_built_year: null,
-    property_legal_description_text: legalDesc || null,
-    property_structure_built_year: propBuiltYear || null,
-    property_type: property_type,
-    subdivision: subdivision || null,
-    total_area: null,
-    zoning: null,
-  };
-  fs.writeFileSync(
-    path.join(outDir, "property.json"),
-    JSON.stringify(property, null, 2),
-  );
-
-  // ADDRESS from unnormalized and HTML lat/lon
-  attemptWriteAddress(unAddr);
-
-  // UTILITIES from owners/utilities_data.json strictly
-  let util = null;
-  if (utilData) {
-    const key = `property_${parcelId}`;
-    util = utilData[key] || null;
-  }
-  if (util) {
-    fs.writeFileSync(
-      path.join(outDir, "utility.json"),
-      JSON.stringify(util, null, 2),
-    );
-  }
-
-  // LAYOUTS from owners/layout_data.json strictly
-  const layoutsKey = `property_${parcelId}`;
-  const lay =
-    layoutData[layoutsKey] && Array.isArray(layoutData[layoutsKey].layouts)
-      ? layoutData[layoutsKey].layouts
-      : [];
-  if (lay && lay.length) {
-    lay.forEach((item, idx) => {
-      fs.writeFileSync(
-        path.join(outDir, `layout_${idx + 1}.json`),
-        JSON.stringify(item, null, 2),
-      );
-    });
-  }
-
-  // Structures from owners/structure_data.json strictly
-  let structure = null;
+  const parcel = readJson(parcelPath);
+  const ownerData = readJson(ownerDataPath);
+  const utilitiesData = readJson(utilitiesDataPath);
+  const structureData = readJson(structureDataPath);
+  const layoutData = readJson(layoutDataPath);
+  const parcelInfo = input.ParcelInformation || {};
+  const pResp =
+      (parcelInfo.response &&
+        parcelInfo.response.value &&
+        parcelInfo.response.value[0]) ||
+      null;
+  const strap = cleanText(pResp.dsp_strap) || cleanText(pResp.strap) || "unknown";
+  const key = `property_${strap.trim()}`;
+  let struct = null;
   if (structureData) {
-    const key = `property_${parcelId}`;
-    structure = structureData[key] || null;
+    struct = key && structureData[key] ? structureData[key] : null;
   }
-  if (structure) {
+  let util = null;
+  if (utilitiesData) {
+    util = key && utilitiesData[key] ? utilitiesData[key] : null;
+  }
+
+  const isMulti = Object.values(input || {}).some(
+    (v) =>
+      v &&
+      typeof v === "object" &&
+      "source_http_request" in v &&
+      "response" in v,
+  );
+  let ownerHasMailingAddress = false;
+  // Property from ParcelInformation
+  try {
+    const pReq = parcelInfo.source_http_request || null;
+    const pResp =
+      (parcelInfo.response &&
+        parcelInfo.response.value &&
+        parcelInfo.response.value[0]) ||
+      null;
+    if (pResp) {
+      ownerHasMailingAddress = extractAddress(pResp, address);
+      const strap = trimStr(
+        pResp.strap ||
+          pResp.Strap ||
+          (parcel && parcel.parcel_identifier) ||
+          "",
+      );
+      const dorDesc = pResp.dorDesc || pResp.prevDorDscr || "";
+      const nbcDesc = pResp.NBCDesc || "";
+      let property_type;
+      try {
+        property_type = mapPropertyType(dorDesc, nbcDesc);
+      } catch (e) {
+        // Re-throw for visibility since property_type is required
+        throw e;
+      }
+      const out = {
+        source_http_request: isMulti ? pReq : undefined,
+        parcel_identifier: strap,
+        property_legal_description_text: pResp.Legals || null,
+        property_type,
+        property_usage_type: mapUsageType(pResp.jurisdesc) || null,
+        subdivision: pResp.subName || null,
+        property_structure_built_year: pResp.ayb ?? null,
+        property_effective_built_year: pResp.eyb ?? null,
+        area_under_air:
+          pResp.HeatedArea != null ? String(pResp.HeatedArea) : null,
+        livable_floor_area: null,
+        total_area:
+          pResp.grossBldArea != null ? String(pResp.grossBldArea) : null,
+        number_of_units: pResp.livunits ?? null,
+        number_of_units_type: null,
+        ownership_estate_type: null,
+        structure_form: null,
+        zoning: null,
+        build_status: null,
+        historic_designation: null,
+      };
+      // Clean undefined to satisfy additionalProperties false
+      Object.keys(out).forEach((k) => out[k] === undefined && delete out[k]);
+      fs.writeFileSync(
+        path.join(dataDir, "property.json"),
+        JSON.stringify(out, null, 2),
+      );
+    }
+  } catch (err) {
+    // If enum mapping fails, output the error as JSON to stdout and stop
+    if (err && err.type === "error") {
+      console.error(JSON.stringify(err, null, 2));
+      process.exit(1);
+    } else {
+      throw err;
+    }
+  }
+
+  // Lot from Land
+  const land = input.Land || {};
+  const landReq = land.source_http_request || null;
+  const landRow =
+    land.response && land.response.value && land.response.value[0];
+  if (
+    landRow ||
+    (input.ParcelInformation && input.ParcelInformation.response)
+  ) {
+    let acres = null;
+    const pResp = input.ParcelInformation?.response?.value?.[0] || {};
+    if (typeof pResp.totalAcres === "number") acres = pResp.totalAcres;
+    let lot_area_sqft = null;
+    if (acres != null) lot_area_sqft = Math.round(acres * 43560);
+    const lotOut = {
+      source_http_request: isMulti ? landReq : undefined,
+      lot_type: null,
+      lot_length_feet: null,
+      lot_width_feet: null,
+      lot_area_sqft: lot_area_sqft,
+      landscaping_features: null,
+      view: null,
+      fencing_type: null,
+      fence_height: null,
+      fence_length: null,
+      driveway_material: null,
+      driveway_condition: null,
+      lot_condition_issues: null,
+      lot_size_acre: acres ?? null,
+      paving_type: null,
+      paving_installation_date: null,
+      paving_area_sqft: null,
+      site_lighting_fixture_count: null,
+      site_lighting_installation_date: null,
+      site_lighting_type: null,
+    };
+    Object.keys(lotOut).forEach(
+      (k) => lotOut[k] === undefined && delete lotOut[k],
+    );
     fs.writeFileSync(
-      path.join(outDir, "structure.json"),
-      JSON.stringify(structure, null, 2),
+      path.join(dataDir, "lot.json"),
+      JSON.stringify(lotOut, null, 2),
     );
   }
 
-  // SALES from HTML table #shVals
-  const sales = [];
-  $("#shVals tbody tr").each((i, tr) => {
-    const tds = $(tr).find("td");
-    if (tds.length >= 7) {
-      const saleDate = $(tds[0]).text().trim();
-      const priceTxt = $(tds[1]).text().trim();
-      const bookPage = $(tds[2]).text().trim();
-      let link = null;
-      const bookPageSplit = bookPage.split("-");
-      if (bookPageSplit.length == 2) {
-        let book = bookPageSplit[0];
-        let page = bookPageSplit[1];
-        link = `https://officialrecords.osceolaclerk.org/browserviewpa/viewer.aspx?book=${book}&page=${page}&booktype=O`;
-      }
-      const deedCode = $(tds[6]).text().trim();
-      const buyer = $(tds[4]).text().trim();
-      sales.push({
-        date: parseISODate(saleDate),
-        price: parseCurrencyToNumber(priceTxt),
-        deedType: deedCode,
-        buyer,
-        bookPage,
-        link
-      });
+  // Tax from ValuesAndTax
+  const valuesAndTax = input.ValuesAndTax || {};
+  const taxReq = valuesAndTax.source_http_request || null;
+  const taxRows = (valuesAndTax.response && valuesAndTax.response.value) || [];
+  let taxIndex = 1;
+  for (const row of taxRows) {
+    const taxOut = {
+      source_http_request: isMulti ? taxReq : undefined,
+      tax_year: row.tax_yr ?? null,
+      property_assessed_value_amount: numOrNull(row.asd_val),
+      property_market_value_amount: numOrNull(row.jst_val),
+      property_building_amount: numOrNull(row.tot_bld_val),
+      property_land_amount: numOrNull(row.tot_lnd_val),
+      property_taxable_value_amount: numOrNull(row.tax_val),
+      monthly_tax_amount: null,
+      period_start_date: null,
+      period_end_date: null,
+      yearly_tax_amount: null,
+      first_year_on_tax_roll: null,
+      first_year_building_on_tax_roll: null,
+    };
+    Object.keys(taxOut).forEach(
+      (k) => taxOut[k] === undefined && delete taxOut[k],
+    );
+    fs.writeFileSync(
+      path.join(dataDir, `tax_${taxIndex}.json`),
+      JSON.stringify(taxOut, null, 2),
+    );
+    taxIndex++;
+  }
+
+  // Sales from SalesHistory
+  const sales = input.SalesHistory || {};
+  const salesReq = sales.source_http_request || null;
+  const salesRows = (sales.response && sales.response.value) || [];
+  let saleIdx = 1;
+  for (const row of salesRows) {
+    const dateOnly = toDateOnly(row.dos);
+    const saleOut = {
+      source_http_request: isMulti ? salesReq : undefined,
+      ownership_transfer_date: dateOnly,
+    };
+    // Include price only if > 0 to satisfy currency format
+    if (row.price && Number(row.price) > 0) {
+      saleOut.purchase_price_amount = Number(row.price);
     }
-  });
-  // Write sales_N and deed_N
-  sales.forEach((s, idx) => {
-    const sObj = {
-      ownership_transfer_date: s.date || null,
-      purchase_price_amount: s.price || null,
+    Object.keys(saleOut).forEach(
+      (k) => saleOut[k] === undefined && delete saleOut[k],
+    );
+    const salePath = path.join(dataDir, `sales_${saleIdx}.json`);
+    fs.writeFileSync(salePath, JSON.stringify(saleOut, null, 2));
+    saleIdx++;
+  }
+
+  // Deeds mapped from sales rows, and relationships use row index to avoid mismatches
+  let deedIdx = 1;
+  for (let i = 0; i < salesRows.length; i++) {
+    const row = salesRows[i];
+    const deedType = mapDeedType(row.trns_cd, row.trans_dscr);
+    const deedOut = {
+      source_http_request: isMulti ? salesReq : undefined,
+      deed_type: deedType,
+    };
+    if (row.or_bk) {
+      deedOut.book = row.or_bk;
+    }
+    if (row.or_pg) {
+      deedOut.page = row.or_pg;
+    }
+    const deedPath = path.join(dataDir, `deed_${deedIdx}.json`);
+    fs.writeFileSync(deedPath, JSON.stringify(deedOut, null, 2));
+
+    // Relationship sales -> deed using the sale row index
+    const saleFile = `./sales_${i + 1}.json`;
+    const rel = {
+      from: { "/": saleFile },
+      to: { "/": `./deed_${deedIdx}.json` },
     };
     fs.writeFileSync(
-      path.join(outDir, `sales_${idx + 1}.json`),
-      JSON.stringify(sObj, null, 2),
+      path.join(dataDir, `relationship_sales_deed_${deedIdx}.json`),
+      JSON.stringify(rel, null, 2),
     );
-    const deedObj = {
-      deed_type: s.deedType ? mapDeedType(s.deedType) : null,
-    };
-    fs.writeFileSync(
-      path.join(outDir, `deed_${idx + 1}.json`),
-      JSON.stringify(deedObj, null, 2),
-    );
-    if (s.link) {
-      const file = {
-        document_type: null,
+    if (deedOut.book && deedOut.page) {
+      const fileUrl = `https://officialrecords.osceolaclerk.org/browserviewpa/viewer.aspx?book=${deedOut.book}&page=${deedOut.page}&booktype=O`;
+      const fileOut = {
+        document_type: "Title",
         file_format: null,
         ipfs_url: null,
-        name: s.bookPage ? `Deed ${s.bookPage}` : "Deed Document",
-        original_url: s.link || null,
+        name: `Deed ${deedOut.book}/${deedOut.page}`,
+        original_url: fileUrl,
+      };
+      const filePath = path.join(dataDir, `file_${deedIdx}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(fileOut, null, 2));
+      const relDeedFile = {
+        to: { "/": `./file_${deedIdx}.json` },
+        from: { "/": `./deed_${deedIdx}.json` },
       };
       fs.writeFileSync(
-        path.join("data", `file_${idx + 1}.json`),
-        JSON.stringify(file, null, 2),
-      );
-
-      // deed -> sale relationship
-      const relSD = {
-        to: { "/": `./sales_${idx + 1}.json` },
-        from: { "/": `./deed_${idx + 1}.json` },
-      };
-      fs.writeFileSync(
-        path.join(outDir, `relationship_sales_deed_${idx + 1}.json`),
-        JSON.stringify(relSD, null, 2),
-      );
-
-      // file -> deed relationship
-      const relFD = {
-        to: { "/": `./deed_${idx + 1}.json` },
-        from: { "/": `./file_${idx + 1}.json` },
-      };
-      fs.writeFileSync(
-        path.join(outDir, `relationship_deed_file_${idx + 1}.json`),
-        JSON.stringify(relFD, null, 2),
+        path.join(dataDir, `relationship_deed_file_${deedIdx}.json`),
+        JSON.stringify(relDeedFile, null, 2),
       );
     }
-  });
-
-  // TAX: collect from working (propVals), certified (propValsCertified), historic (propHistoricVals)
-  function extractTaxRows(tableSel) {
-    const rows = [];
-    $(`${tableSel} tbody tr`).each((i, tr) => {
-      const tds = $(tr).find("td");
-      if (tds.length >= 8) {
-        const year = parseInt($(tds[0]).text().trim(), 10);
-        const land = parseCurrencyToNumber($(tds[1]).text().trim());
-        const building = parseCurrencyToNumber($(tds[2]).text().trim());
-        const market = parseCurrencyToNumber($(tds[4]).text().trim());
-        const assessed = parseCurrencyToNumber($(tds[5]).text().trim());
-        const taxable = parseCurrencyToNumber($(tds[7]).text().trim());
-        rows.push({ year, land, building, market, assessed, taxable });
-      }
-    });
-    return rows;
+    deedIdx++;
   }
-  const taxWorking = extractTaxRows("#propVals");
-  const taxCertified = extractTaxRows("#propValsCertified");
-  const taxHistoric = extractTaxRows("#propHistoricVals");
-  const allTax = [...taxWorking, ...taxCertified, ...taxHistoric];
-  const seenYears = new Set();
-  allTax.forEach((t) => {
-    if (!t.year || seenYears.has(t.year)) return;
-    seenYears.add(t.year);
-    const taxObj = {
-      first_year_building_on_tax_roll: null,
-      first_year_on_tax_roll: null,
-      monthly_tax_amount: null,
-      period_end_date: null,
-      period_start_date: null,
-      property_assessed_value_amount: t.assessed ? t.assessed : null,
-      property_building_amount: t.building ? t.building : null,
-      property_land_amount: t.land ? t.land : null,
-      property_market_value_amount: t.market ? t.market : null,
-      property_taxable_value_amount: t.taxable ? t.taxable : null,
-      tax_year: t.year,
-      yearly_tax_amount: null,
-    };
-    fs.writeFileSync(
-      path.join(outDir, `tax_${t.year}.json`),
-      JSON.stringify(taxObj, null, 2),
-    );
-  });
-  writePersonCompaniesSalesRelationships(parcelId, sales);
+  // Owners: create company files and relationships to sales
+  if (ownerData) {
+    const ownersPayload = ownerData[key];
+    writePersonCompaniesSalesRelationships(ownersPayload, salesRows, ownerHasMailingAddress);
+  }
+  if (layoutData) {
+    const lset =
+      key && layoutData[key] && Array.isArray(layoutData[key].layouts)
+        ? layoutData[key].layouts
+        : [];
+    let layoutBuildingMap = {};
+    let idx = 1;
+    for (const l of lset) {
+      const layoutOut = {
+        space_type: l.space_type ?? null,
+        space_type_index: l.space_type_index ?? null,
+        flooring_material_type: l.flooring_material_type ?? null,
+        size_square_feet: l.size_square_feet ?? null,
+        has_windows: l.has_windows ?? null,
+        window_design_type: l.window_design_type ?? null,
+        window_material_type: l.window_material_type ?? null,
+        window_treatment_type: l.window_treatment_type ?? null,
+        is_finished: l.is_finished ?? null,
+        furnished: l.furnished ?? null,
+        paint_condition: l.paint_condition ?? null,
+        flooring_wear: l.flooring_wear ?? null,
+        clutter_level: l.clutter_level ?? null,
+        visible_damage: l.visible_damage ?? null,
+        countertop_material: l.countertop_material ?? null,
+        cabinet_style: l.cabinet_style ?? null,
+        fixture_finish_quality: l.fixture_finish_quality ?? null,
+        design_style: l.design_style ?? null,
+        natural_light_quality: l.natural_light_quality ?? null,
+        decor_elements: l.decor_elements ?? null,
+        pool_type: l.pool_type ?? null,
+        pool_equipment: l.pool_equipment ?? null,
+        spa_type: l.spa_type ?? null,
+        safety_features: l.safety_features ?? null,
+        view_type: l.view_type ?? null,
+        lighting_features: l.lighting_features ?? null,
+        condition_issues: l.condition_issues ?? null,
+        is_exterior: l.is_exterior ?? false,
+        pool_condition: l.pool_condition ?? null,
+        pool_surface_type: l.pool_surface_type ?? null,
+        pool_water_quality: l.pool_water_quality ?? null,
 
-  // COMPANIES from owners/owner_data.json only
-  // const ownerKey = `property_${parcelId}`;
-  // const ownersBundle = ownerData[ownerKey] || {};
-  // const ownersByDate = ownersBundle.owners_by_date || {};
-  // // collect unique company names present in owners_by_date
-  // const companyNames = new Map();
-  // let companyIndex = 1;
-  // Object.keys(ownersByDate).forEach((dateKey) => {
-  //   const arr = ownersByDate[dateKey] || [];
-  //   arr.forEach((o) => {
-  //     if (o && o.type === "company" && o.name) {
-  //       if (!companyNames.has(o.name)) {
-  //         companyNames.set(o.name, companyIndex++);
-  //       }
-  //     }
-  //   });
-  // });
-  // // Write company files
-  // companyNames.forEach((idx, name) => {
-  //   const obj = { name };
-  //   fs.writeFileSync(
-  //     path.join(outDir, `company_${idx}.json`),
-  //     JSON.stringify(obj, null, 2),
-  //   );
-  // });
-
-  // // Relationships: map sales (buyers) to company files by matching names to owners_by_date entries
-  // // Build helper to resolve buyer name to company index by string equality
-  // function findCompanyIndexByName(name) {
-  //   if (!name) return null;
-  //   return companyNames.get(name) || null;
-  // }
-  // // Link each sales_i to the buyer from the sales table
-  // sales.forEach((s, idx) => {
-  //   const ci = findCompanyIndexByName(s.buyer);
-  //   if (ci) {
-  //     const rel = {
-  //       to: { "/": `./company_${ci}.json` },
-  //       from: { "/": `./sales_${idx + 1}.json` },
-  //     };
-  //     fs.writeFileSync(
-  //       path.join(outDir, `relationship_sales_company_${idx + 1}.json`),
-  //       JSON.stringify(rel, null, 2),
-  //     );
-  //   }
-  //   // sales -> deed relationship
-  //   const relSD = {
-  //     to: { "/": `./sales_${idx + 1}.json` },
-  //     from: { "/": `./deed_${idx + 1}.json` },
-  //   };
-  //   fs.writeFileSync(
-  //     path.join(outDir, `relationship_sales_deed_${idx + 1}.json`),
-  //     JSON.stringify(relSD, null, 2),
-  //   );
-  // });
+        adjustable_area_sq_ft: l.adjustable_area_sq_ft ?? null,
+        area_under_air_sq_ft: l.area_under_air_sq_ft ?? null,
+        bathroom_renovation_date: l.bathroom_renovation_date ?? null,
+        building_number: l.building_number ?? null,
+        kitchen_renovation_date: l.kitchen_renovation_date ?? null,
+        heated_area_sq_ft: l.heated_area_sq_ft ?? null,
+        installation_date: l.installation_date ?? null,
+        livable_area_sq_ft: l.livable_area_sq_ft ?? null,
+        pool_installation_date: l.pool_installation_date ?? null,
+        spa_installation_date: l.spa_installation_date ?? null,
+        story_type: l.story_type ?? null,
+        total_area_sq_ft: l.total_area_sq_ft ?? null,
+      };
+      writeJSON(path.join("data", `layout_${idx}.json`), layoutOut);
+      if (l.space_type === "Building") {
+        const building_number = l.building_number;
+        layoutBuildingMap[building_number.toString()] = idx;
+      }
+      if (l.space_type !== "Building") {
+        const building_number = l.building_number;
+        if (building_number) {
+          const building_layout_number = layoutBuildingMap[building_number.toString()];
+          writeJSON(path.join("data", `relationship_layout_${building_layout_number}_to_layout_${idx}.json`), {
+            to: { "/": `./layout_${idx}.json` },
+            from: { "/": `./layout_${building_layout_number}.json` },
+          },);
+        }
+      }
+      if (util && l.space_type === "Building") {
+        if (l.building_number && l.building_number.toString() in util) {
+          writeJSON(path.join("data", `utility_${idx}.json`), util[l.building_number.toString()]);
+          writeJSON(path.join("data", `relationship_layout_to_utility_${idx}.json`), {
+                    to: { "/": `./utility_${idx}.json` },
+                    from: { "/": `./layout_${idx}.json` },
+          },);
+        }
+      }
+      if (struct && l.space_type === "Building") {
+        if (l.building_number && l.building_number.toString() in struct) {
+          writeJSON(path.join("data", `structure_${idx}.json`), struct[l.building_number.toString()]);
+          writeJSON(path.join("data", `relationship_layout_to_structure_${idx}.json`), {
+                    to: { "/": `./structure_${idx}.json` },
+                    from: { "/": `./layout_${idx}.json` },
+          },);
+        }
+      }
+      idx++;
+    }
+  }
 }
 
-main();
+if (require.main === module) {
+  try {
+    main();
+    console.log("Extraction complete.");
+  } catch (e) {
+    if (e && e.type === "error") {
+      writeJSON(path.join("data", "error.json"), e);
+      console.error("Extraction error:", e);
+      process.exit(1);
+    } else {
+      console.error("Unexpected error:", e);
+      process.exit(1);
+    }
+  }
+}

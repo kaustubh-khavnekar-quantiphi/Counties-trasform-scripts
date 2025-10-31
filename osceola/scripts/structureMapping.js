@@ -1,184 +1,178 @@
-// Structure mapping script
-// Reads input.html, extracts structural details using cheerio, outputs owners/structure_data.json
+// structureMapping.js
+// Reads input.json, extracts structure data, and writes to data/structure_data.json and owners/structure_data.json
 
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function safeText($el) {
-  if (!$el || $el.length === 0) return "";
-  return $el.first().text().trim();
+function ensureDir(p) {
+  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+function readJSON(fp) {
+  try {
+    const raw = fs.readFileSync(fp, "utf8");
+    // Some sources may contain HTML-encoded strings inside JSON fields; cheerio can help strip tags if needed
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
   }
 }
 
-function main() {
-  const inputPath = path.join(process.cwd(), "input.html");
-  const html = fs.readFileSync(inputPath, "utf8");
-  const $ = cheerio.load(html);
+function cleanText(str) {
+  if (str == null) return null;
+  try {
+    const $ = cheerio.load(String(str));
+    return $.text().trim() || null;
+  } catch (e) {
+    return String(str);
+  }
+}
 
-  // Parcel ID
-  let parcelId = ($("#stu").attr("value") || $("#stu").val() || "").trim();
-  // if (!parcelId) {
-  //   // Fallback: find Parcel ID in text
-  //   const parcelText =
-  //     safeText($(".parcelResultFistParcel")) || safeText($(".rParcel"));
-  //   parcelId = (parcelText.match(/\d{17,}/) || [null])[0] || "unknown";
-  // }
+function mapRoofDesign(val) {
+  if (!val) return null;
+  const t = val.toLowerCase();
+  if (t.includes("gable") && t.includes("hip")) return "Combination";
+  if (t.includes("gable")) return "Gable";
+  if (t.includes("hip")) return "Hip";
+  if (t.includes("flat")) return "Flat";
+  return null;
+}
 
-  // Basic structural clues from Buildings section
-  const buildingHeadings = $("h6").filter((i, el) =>
-    /^(Building\s+\d+)/i.test($(el).text().trim()),
-  );
-  const numberOfBuildings = buildingHeadings.length || null;
+function mapExteriorWallMaterial(values) {
+  // Given descriptions like "CONCRETE BLOCK STUCCO" or "FRAME STUCCO" map to cladding
+  if (!Array.isArray(values)) return { primary: null, secondary: null };
+  const txt = values.map((v) => (v || "").toLowerCase());
+  if (txt.some((v) => v.includes("stucco"))) {
+    return { primary: "Stucco", secondary: null };
+  }
+  if (txt.some((v) => v.includes("brick"))) {
+    return { primary: "Brick", secondary: null };
+  }
+  if (txt.some((v) => v.includes("vinyl"))) {
+    return { primary: "Vinyl Siding", secondary: null };
+  }
+  return { primary: null, secondary: null };
+}
 
-  // Gather roof and wall clues
-  const wallTexts = [];
-  const roofTexts = [];
+(function main() {
+  const inputPath = path.join(process.cwd(), "input.json");
+  const data = readJSON(inputPath);
 
-  // Rows with labels we saw in the HTML
-  $("strong.bld_wall").each((i, el) => {
-    // the value seemed to be in the next sibling span
-    const val = $(el).parent().find("span").last().text().trim();
-    if (val) wallTexts.push(val.toUpperCase());
-  });
-  $("strong.bld_roof").each((i, el) => {
-    const val = $(el).parent().find("span").last().text().trim();
-    if (val) roofTexts.push(val.toUpperCase());
-  });
+  const parcel = data?.ParcelInformation?.response?.value?.[0] || {};
+  const structEls = data?.StructureElements?.response?.value || [];
+  const buildings = data?.Building?.response?.value || []; // Assuming a 'Building' array exists in input.json
 
-  // Additionally scan the table/value rows for explicit labels
-  // $("div.row").each((i, el) => {
-  //   const rowText = $(el).text().trim().toUpperCase();
-  //   if (rowText.includes("EXTERIOR WALL")) {
-  //     const spanVal = $(el).find("span").last().text().trim().toUpperCase();
-  //     if (spanVal) wallTexts.push(spanVal);
-  //   }
-  //   if (rowText.includes("ROOF COVER")) {
-  //     const spanVal = $(el).find("span").last().text().trim().toUpperCase();
-  //     if (spanVal) roofTexts.push(spanVal);
-  //   }
-  // });
-  // Determine exterior wall primary material
-  let exterior_wall_material_primary = null;
-  const wallCombined = wallTexts.join(" | ");
-  if (/HARDIBOARD/.test(wallCombined)) {
-    exterior_wall_material_primary = "Fiber Cement Siding";
-  } else if (/BRICK/.test(wallCombined)) {
-    exterior_wall_material_primary = "Brick";
-  } else if (/STUCCO/.test(wallCombined)) {
-    exterior_wall_material_primary = "Stucco";
-  } else if (/VINYL/.test(wallCombined)) {
-    exterior_wall_material_primary = "Vinyl Siding";
-  } else if (/WOOD/.test(wallCombined)) {
-    exterior_wall_material_primary = "Wood Siding";
+  const strap =
+    cleanText(parcel.dsp_strap) || cleanText(parcel.strap) || "unknown";
+  const propertyKey = `property_${strap.trim()}`;
+
+  const allStructures = {};
+  let buildIndex = 1;
+  // Iterate over each building to create a separate structure object
+  for (const building of buildings) {
+    const buildingNumber = building.CardNumber;
+
+    // Filter structure elements and sub-areas relevant to the current building
+    const buildingStructEls = structEls.filter(
+      (e) => e.bld_num === buildingNumber,
+    );
+
+    const roofStructs = buildingStructEls
+      .filter((e) => e?.tp_dscr === "ROOF STRUCTURE")
+      .map((e) => cleanText(e?.cd_dscr))
+      .filter(Boolean);
+    const exteriorWalls = buildingStructEls
+      .filter((e) => e?.tp_dscr === "EXTERIOR WALL")
+      .map((e) => cleanText(e?.cd_dscr))
+      .filter(Boolean);
+    console.log(roofStructs);
+    console.log(exteriorWalls);
+    const roofDesignType = mapRoofDesign(roofStructs[0] || null);
+    const wallMat = mapExteriorWallMaterial(exteriorWalls);
+    // Build structure object following schema with explicit keys
+    const structure = {
+      architectural_style_type: null,
+      attachment_type: null,
+      ceiling_condition: null,
+      ceiling_height_average: null,
+      ceiling_insulation_type: null,
+      ceiling_structure_material: null,
+      ceiling_surface_material: null,
+      exterior_door_installation_date: null,
+      exterior_door_material: null,
+      exterior_wall_condition: null,
+      exterior_wall_condition_primary: null,
+      exterior_wall_condition_secondary: null,
+      exterior_wall_insulation_type: null,
+      exterior_wall_insulation_type_primary: null,
+      exterior_wall_insulation_type_secondary: null,
+      exterior_wall_material_primary: wallMat.primary,
+      exterior_wall_material_secondary: null,
+      finished_base_area: null,
+      finished_basement_area: null,
+      finished_upper_story_area: null,
+      flooring_condition: null,
+      flooring_material_primary: null,
+      flooring_material_secondary: null,
+      foundation_condition: null,
+      foundation_material: null,
+      foundation_repair_date: null,
+      foundation_type: null,
+      foundation_waterproofing: null,
+      gutters_condition: null,
+      gutters_material: null,
+      interior_door_material: null,
+      interior_wall_condition: null,
+      interior_wall_finish_primary: null,
+      interior_wall_finish_secondary: null,
+      interior_wall_structure_material: null,
+      interior_wall_structure_material_primary: null,
+      interior_wall_structure_material_secondary: null,
+      interior_wall_surface_material_primary: null,
+      interior_wall_surface_material_secondary: null,
+      number_of_buildings: null,
+      number_of_stories: null,
+      primary_framing_material: null,
+      roof_age_years: null,
+      roof_condition: null,
+      roof_covering_material: null,
+      roof_date: null,
+      roof_design_type: roofDesignType,
+      roof_material_type: null,
+      roof_structure_material: null,
+      roof_underlayment_type: null,
+      secondary_framing_material: null,
+      siding_installation_date: null,
+      structural_damage_indicators: null,
+      subfloor_material: null,
+      unfinished_base_area: null,
+      unfinished_basement_area: null,
+      unfinished_upper_story_area: null,
+      window_frame_material: null,
+      window_glazing_type: null,
+      window_installation_date: null,
+      window_operation_type: null,
+      window_screen_material: null,
+    };
+
+    allStructures[buildIndex.toString()] = structure;
+    buildIndex++;
   }
 
-  // Secondary left unknown
-  const exterior_wall_material_secondary = null;
+  // Output containers
+  const out = {};
+  out[propertyKey] = allStructures; // Store the array of structures under the property key
 
-  // Primary framing material (FRAME indicated)
-  let primary_framing_material = null;
-  if (/FRAME/.test(wallCombined)) {
-    primary_framing_material = "Wood Frame";
-  }
-
-  // Roof structure material — detect wood truss if found
-  let roof_structure_material = null;
-  const roofCombined = roofTexts.join(" | ");
-  if (/TRUSS/.test(roofCombined) || /WOOD FRAME\/TRUSS/.test(roofCombined)) {
-    roof_structure_material = "Wood Truss";
-  }
-
-  // Roof design type — if GABLE/HIP present, call it Combination
-  let roof_design_type = null;
-  if (/GABLE/.test(roofCombined) && /HIP/.test(roofCombined)) {
-    roof_design_type = "Combination";
-  } else if (/GABLE/.test(roofCombined)) {
-    roof_design_type = "Gable";
-  } else if (/HIP/.test(roofCombined)) {
-    roof_design_type = "Hip";
-  }
-
-  // Build the structure object with defaults as null
-  const structure = {
-    architectural_style_type: null,
-    attachment_type: null,
-    ceiling_condition: null,
-    ceiling_height_average: null,
-    ceiling_insulation_type: null,
-    ceiling_structure_material: null,
-    ceiling_surface_material: null,
-    exterior_door_installation_date: null,
-    exterior_door_material: null,
-    exterior_wall_condition: null,
-    exterior_wall_condition_primary: null,
-    exterior_wall_condition_secondary: null,
-    exterior_wall_insulation_type: null,
-    exterior_wall_insulation_type_primary: null,
-    exterior_wall_insulation_type_secondary: null,
-    exterior_wall_material_primary: exterior_wall_material_primary,
-    exterior_wall_material_secondary: exterior_wall_material_secondary,
-    finished_base_area: null,
-    finished_basement_area: null,
-    finished_upper_story_area: null,
-    flooring_condition: null,
-    flooring_material_primary: null,
-    flooring_material_secondary: null,
-    foundation_condition: null,
-    foundation_material: null,
-    foundation_repair_date: null,
-    foundation_type: null,
-    foundation_waterproofing: null,
-    gutters_condition: null,
-    gutters_material: null,
-    interior_door_material: null,
-    interior_wall_condition: null,
-    interior_wall_finish_primary: null,
-    interior_wall_finish_secondary: null,
-    interior_wall_structure_material: null,
-    interior_wall_structure_material_primary: null,
-    interior_wall_structure_material_secondary: null,
-    interior_wall_surface_material_primary: null,
-    interior_wall_surface_material_secondary: null,
-    number_of_buildings: numberOfBuildings,
-    number_of_stories: null,
-    primary_framing_material: primary_framing_material,
-    roof_age_years: null,
-    roof_condition: null,
-    roof_covering_material: null,
-    roof_date: null,
-    roof_design_type: roof_design_type,
-    roof_material_type: null,
-    roof_structure_material: roof_structure_material,
-    roof_underlayment_type: null,
-    secondary_framing_material: null,
-    siding_installation_date: null,
-    structural_damage_indicators: null,
-    subfloor_material: null,
-    unfinished_base_area: null,
-    unfinished_basement_area: null,
-    unfinished_upper_story_area: null,
-    window_frame_material: null,
-    window_glazing_type: null,
-    window_installation_date: null,
-    window_operation_type: null,
-    window_screen_material: null,
-  };
-
-  // Write output
+  // Write to data/ and owners/
   const ownersDir = path.join(process.cwd(), "owners");
   ensureDir(ownersDir);
-  const outPath = path.join(ownersDir, "structure_data.json");
-  const payload = {};
-  payload[`property_${parcelId}`] = structure;
-  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
 
-  console.log(`Wrote structure data for property_${parcelId} to ${outPath}`);
-}
+  fs.writeFileSync(
+    path.join(ownersDir, "structure_data.json"),
+    JSON.stringify(out, null, 2),
+  );
 
-main();
+  // Simple console confirmation
+  console.log("Structure mapping complete for property:", propertyKey);
+})();

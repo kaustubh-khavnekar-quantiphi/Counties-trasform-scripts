@@ -1,86 +1,108 @@
-// Utility mapping script
-// Reads input.html, extracts utility details using cheerio, outputs owners/utilities_data.json
+// utilityMapping.js
+// Reads input.json, extracts utility data, and writes to data/utilities_data.json and owners/utilities_data.json
 
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-function safeText($el) {
-  if (!$el || $el.length === 0) return "";
-  return $el.first().text().trim();
+function ensureDir(p) {
+  if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+
+function readJSON(fp) {
+  try {
+    const raw = fs.readFileSync(fp, "utf8");
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
   }
 }
 
-function main() {
-  const inputPath = path.join(process.cwd(), "input.html");
-  const html = fs.readFileSync(inputPath, "utf8");
-  const $ = cheerio.load(html);
-
-  // Parcel ID
-  let parcelId = ($("#stu").attr("value") || $("#stu").val() || "").trim();
-  // if (!parcelId) {
-  //   const parcelText =
-  //     safeText($(".parcelResultFistParcel")) || safeText($(".rParcel"));
-  //   parcelId = (parcelText.match(/\d{17,}/) || [null])[0] || "unknown";
-  // }
-
-  // This dataset has no explicit utilities info. We'll set conservative nulls and booleans where possible.
-
-  const utility = {
-    cooling_system_type: null,
-    electrical_panel_capacity: null,
-    electrical_panel_installation_date: null,
-    electrical_rewire_date: null,
-    electrical_wiring_type: null,
-    electrical_wiring_type_other_description: null,
-    heating_fuel_type: null,
-    heating_system_type: null,
-    hvac_capacity_kw: null,
-    hvac_capacity_tons: null,
-    hvac_condensing_unit_present: null,
-    hvac_equipment_component: null,
-    hvac_equipment_manufacturer: null,
-    hvac_equipment_model: null,
-    hvac_installation_date: null,
-    hvac_seer_rating: null,
-    hvac_system_configuration: null,
-    hvac_unit_condition: null,
-    hvac_unit_issues: null,
-    plumbing_system_installation_date: null,
-    plumbing_system_type: null,
-    plumbing_system_type_other_description: null,
-    public_utility_type: null,
-    sewer_connection_date: null,
-    sewer_type: null,
-    smart_home_features: null,
-    smart_home_features_other_description: null,
-    solar_installation_date: null,
-    solar_inverter_installation_date: null,
-    solar_inverter_manufacturer: null,
-    solar_inverter_model: null,
-    solar_inverter_visible: false,
-    solar_panel_present: false,
-    solar_panel_type: null,
-    solar_panel_type_other_description: null,
-    water_connection_date: null,
-    water_heater_installation_date: null,
-    water_heater_manufacturer: null,
-    water_heater_model: null,
-    water_source_type: null,
-    well_installation_date: null,
-  };
-
-  const ownersDir = path.join(process.cwd(), "owners");
-  ensureDir(ownersDir);
-  const outPath = path.join(ownersDir, "utilities_data.json");
-  const payload = {};
-  payload[`property_${parcelId}`] = utility;
-  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
-  console.log(`Wrote utilities data for property_${parcelId} to ${outPath}`);
+function cleanText(str) {
+  if (str == null) return null;
+  try {
+    const $ = cheerio.load(String(str));
+    return $.text().trim() || null;
+  } catch (e) {
+    return String(str);
+  }
 }
 
-main();
+function buildUtility(data) {
+  const buildings = data?.Building?.response?.value || [];
+  let utilities = {};
+  if (buildings && buildings.length > 0) {
+    buildings.forEach((building, bidx) => {
+      // Defaults
+      const util = {
+        cooling_system_type: null,
+        heating_system_type: null,
+        public_utility_type: null,
+        sewer_type: null,
+        water_source_type: null,
+        plumbing_system_type: null,
+        plumbing_system_type_other_description: null,
+        electrical_panel_capacity: null,
+        electrical_panel_installation_date: null,
+        electrical_rewire_date: null,
+        electrical_wiring_type: null,
+        hvac_condensing_unit_present: null,
+        electrical_wiring_type_other_description: null,
+        solar_panel_present: false,
+        solar_panel_type: null,
+        solar_panel_type_other_description: null,
+        smart_home_features: null,
+        smart_home_features_other_description: null,
+        hvac_unit_condition: null,
+        solar_inverter_visible: false,
+        hvac_unit_issues: null,
+        hvac_capacity_kw: null,
+        hvac_capacity_tons: null,
+        hvac_equipment_component: null,
+        hvac_equipment_manufacturer: null,
+        hvac_equipment_model: null,
+        hvac_installation_date: null,
+        hvac_seer_rating: null,
+        hvac_system_configuration: null,
+        plumbing_fixture_count: null,
+        plumbing_fixture_quality: null,
+        plumbing_fixture_type_primary: null,
+        plumbing_system_installation_date: null,
+        public_utility_type_other_description: null,
+        sewer_connection_date: null,
+        smart_home_features_list: null,
+        solar_installation_date: null,
+        solar_inverter_installation_date: null,
+        solar_inverter_manufacturer: null,
+        solar_inverter_model: null,
+        water_connection_date: null,
+        water_heater_installation_date: null,
+        water_heater_manufacturer: null,
+        water_heater_model: null,
+        well_installation_date: null,
+      };
+      utilities[(bidx + 1).toString()] = util;
+    });
+  }
+  return utilities;
+}
+
+(function main() {
+  const inputPath = path.join(process.cwd(), "input.json");
+  const data = readJSON(inputPath);
+
+  const parcel = data?.ParcelInformation?.response?.value?.[0] || {};
+  const strap =
+    cleanText(parcel.dsp_strap) || cleanText(parcel.strap) || "unknown";
+  const propertyKey = `property_${strap.trim()}`;
+  
+  const util = buildUtility(data);
+  const outDir = path.join(process.cwd(), "owners");
+  fs.mkdirSync(outDir, { recursive: true });
+  const outPath = path.join(outDir, "utilities_data.json");
+  const payload = {};
+  payload[propertyKey] = util;
+  fs.writeFileSync(outPath, JSON.stringify(payload, null, 2), "utf8");
+
+  console.log("Utility mapping complete:", propertyKey);
+})();
