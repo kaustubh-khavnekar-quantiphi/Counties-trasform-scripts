@@ -2,8 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
 
-const NAME_PATTERN = /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/;
-
 // Helper: normalize whitespace
 function norm(str) {
   return String(str || "")
@@ -110,54 +108,18 @@ function normalizeWhitespace(str) {
     .trim();
 }
 
-function formatNameToken(token) {
-  if (!token) return "";
-  return token
-    .split(/([\-'\.])/)
-    .map((segment) => {
-      if (/[\-'\.]/.test(segment)) return segment;
-      if (!segment) return "";
-      return segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase();
-    })
-    .join("");
-}
-
-function enforceNamePattern(raw) {
-  if (!raw) return "";
-  let parsedName = normalizeWhitespace(raw)
-    .replace(/\([^)]*\)/g, "") // Remove anything in parentheses
-    .replace(/[^A-Za-z\-', .]/g, " ") // Strip disallowed characters
-    .replace(/\s{2,}/g, " ")
-    .trim();
-  parsedName = parsedName
-    .replace(/^[\-',. ]+/, "")
-    .replace(/[\-',. ]+$/, "");
-  if (!parsedName) return "";
-
-  const titled = parsedName
-    .split(/\s+/)
-    .map((part) => formatNameToken(part))
-    .filter(Boolean)
-    .join(" ")
-    .replace(/^[\-',. ]+/, "")
-    .replace(/[\-',. ]+$/, "");
-
-  if (NAME_PATTERN.test(titled)) return titled;
-
-  const fallback = titled
-    .replace(/[\-',.]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) =>
-      part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
-    )
-    .join(" ");
-
-  return NAME_PATTERN.test(fallback) ? fallback : "";
-}
-
 function cleanInvalidCharsFromName(raw) {
-  return enforceNamePattern(raw);
+  let parsedName = normalizeWhitespace(raw)
+    .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
+    .replace(/[^A-Za-z\-', .]/g, "") // Only keep valid characters
+    .trim();
+  while (/^[\-', .]/i.test(parsedName)) { // Cannot start or end with special characters
+    parsedName = parsedName.slice(1);
+  }
+  while (/[\-', .]$/i.test(parsedName)) { // Cannot start or end with special characters
+    parsedName = parsedName.slice(0, parsedName.length - 1);
+  }
+  return parsedName;
 }
 
 function isCompany(name) {

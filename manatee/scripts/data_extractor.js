@@ -2464,8 +2464,6 @@ function mapInstrumentToDeedType(instr) {
 let people = [];
 let companies = [];
 
-const NAME_PATTERN = /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/;
-
 function findPersonIndexByName(first, last) {
   const tf = titleCaseName(first);
   const tl = titleCaseName(last);
@@ -2485,47 +2483,12 @@ function findCompanyIndexByName(name) {
 }
 
 function titleCaseName(s) {
-  if (!s) return null;
-  const cleaned = String(s)
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\([^)]*\)/g, "")
-    .replace(/^[\-',. ]+/, "")
-    .replace(/[\-',. ]+$/, "");
-  if (!cleaned) return null;
-
-  const formatToken = (token) =>
-    token
-      .split(/([\-'\.])/)
-      .map((segment) => {
-        if (/[\-'\.]/.test(segment)) return segment;
-        if (!segment) return "";
-        return (
-          segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase()
-        );
-      })
-      .join("");
-
-  const titled = cleaned
+  if (!s) return s;
+  return s
+    .toLowerCase()
     .split(/\s+/)
-    .map((token) => formatToken(token))
-    .filter(Boolean)
-    .join(" ")
-    .replace(/^[\-',. ]+/, "")
-    .replace(/[\-',. ]+$/, "");
-
-  if (NAME_PATTERN.test(titled)) return titled;
-
-  const fallback = titled
-    .replace(/[\-',.]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(
-      (token) => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase(),
-    )
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
-  return NAME_PATTERN.test(fallback) ? fallback : null;
 }
 
 function writeJSON(p, obj) {
@@ -3149,19 +3112,17 @@ function main() {
             }
           });
         });
-        people = Array.from(personMap.values())
-          .map((p) => ({
-            first_name: p.first_name ? titleCaseName(p.first_name) : null,
-            middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
-            last_name: p.last_name ? titleCaseName(p.last_name) : null,
-            birth_date: null,
-            prefix_name: null,
-            suffix_name: null,
-            us_citizenship_status: null,
-            veteran_status: null,
-            request_identifier: parcel.parcel_identifier,
-          }))
-          .filter((p) => p.first_name && p.last_name);
+        people = Array.from(personMap.values()).map((p) => ({
+          first_name: p.first_name ? titleCaseName(p.first_name) : null,
+          middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
+          last_name: p.last_name ? titleCaseName(p.last_name) : null,
+          birth_date: null,
+          prefix_name: null,
+          suffix_name: null,
+          us_citizenship_status: null,
+          veteran_status: null,
+          request_identifier: parcel.parcel_identifier,
+        }));
         people.forEach((p, idx) => {
           
         });
