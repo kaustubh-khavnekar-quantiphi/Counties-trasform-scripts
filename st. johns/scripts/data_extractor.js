@@ -1531,7 +1531,7 @@ function extractValuation($) {
       market: get("Just Market"),
       assessed: get("Assessed Value"),
       taxable: get("Taxable Value"),
-      exemption: get("Exempt Value"),
+      exemption: get("Total Exemptions"),
     };
   });
 }
@@ -1860,7 +1860,7 @@ function writeTaxes($) {
       property_building_amount: parseCurrencyToNumber(v.building),
       property_land_amount: parseCurrencyToNumber(v.land),
       property_taxable_value_amount: parseCurrencyToNumber(v.taxable),
-        property_exemption_amount: parseCurrencyToNumber(v.exemption),
+      property_exemption_amount: parseCurrencyToNumber(v.exemption),
       monthly_tax_amount: null,
       period_end_date: null,
       period_start_date: null,
