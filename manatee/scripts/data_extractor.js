@@ -2482,13 +2482,35 @@ function findCompanyIndexByName(name) {
   return null;
 }
 
-function titleCaseName(s) {
-  if (!s) return s;
-  return s
-    .toLowerCase()
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function titleCaseName(value) {
+  if (value == null) return value;
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  let result = "";
+  let capitalizeNext = true;
+  let previousWasSpace = false;
+  const punctuationRegex = /[-',.]/;
+  for (const ch of trimmed.toLowerCase()) {
+    if (/\s/.test(ch)) {
+      if (!previousWasSpace) result += " ";
+      previousWasSpace = true;
+      capitalizeNext = true;
+      continue;
+    }
+    previousWasSpace = false;
+    if (punctuationRegex.test(ch)) {
+      result += ch;
+      capitalizeNext = true;
+      continue;
+    }
+    if (capitalizeNext && /[a-z]/.test(ch)) {
+      result += ch.toUpperCase();
+      capitalizeNext = false;
+    } else {
+      result += ch;
+    }
+  }
+  return result;
 }
 
 function writeJSON(p, obj) {
