@@ -1397,10 +1397,8 @@ function main() {
     lot_size_acre: lotAcres && lotAcres > 0 != null ? lotAcres : null,
     paving_area_sqft: null,
     paving_installation_date: null,
-    paving_type: null,
     site_lighting_fixture_count: null,
     site_lighting_installation_date: null,
-    site_lighting_type: null,
   };
   writeOut("lot.json", lotObj);
   // Layout extraction from owners/layout_data.json
