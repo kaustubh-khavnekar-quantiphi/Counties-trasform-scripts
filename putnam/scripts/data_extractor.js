@@ -1014,7 +1014,7 @@ const propertyTypeByUseCode = propertyTypeMapping.reduce((lookup, entry) => {
     return lookup;
   }
 
-  const normalizedUseCode = entry.property_usecode.match(/\d{4}/)[0];
+  const normalizedUseCode = entry.property_usecode.match(/\d{5}/)[0];
 
   if (!normalizedUseCode) {
     return lookup;
@@ -1027,7 +1027,7 @@ const propertyTypeByUseCode = propertyTypeMapping.reduce((lookup, entry) => {
 function mapPropertyTypeFromUseCode(code) {
   if (!code && code !== 0) return null;
 
-  const normalizedInput = String(code).match(/\d{4}/)[0];
+  const normalizedInput = String(code).match(/\d{5}/)[0];
   if (!normalizedInput) return null;
 
   if (Object.prototype.hasOwnProperty.call(propertyTypeByUseCode, normalizedInput)) {
@@ -1607,7 +1607,7 @@ function main() {
     lot_type: null,
     lot_length_feet: null,
     lot_width_feet: null,
-    lot_area_sqft: lotAcres != null && lotAcres > 0 ? Math.round(lotAcres * 43560) : null,
+    lot_area_sqft: (lotAcres != null && lotAcres > 0) ? Math.round(lotAcres * 43560) : null,
     landscaping_features: null,
     view: null,
     fencing_type: null,
@@ -1616,7 +1616,7 @@ function main() {
     driveway_material: null,
     driveway_condition: null,
     lot_condition_issues: null,
-    lot_size_acre: lotAcres && lotAcres > 0 != null ? lotAcres : null,
+    lot_size_acre: (lotAcres != null && lotAcres > 0) ? lotAcres : null,
     paving_area_sqft: null,
     paving_installation_date: null,
     site_lighting_fixture_count: null,
