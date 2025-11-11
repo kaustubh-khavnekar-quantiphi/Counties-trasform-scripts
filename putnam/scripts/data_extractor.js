@@ -1141,12 +1141,12 @@ function mapInstrumentToDeedType(instr) {
   const u = instr.trim().toUpperCase();
   if (u === "WD") return "Warranty Deed";
   if (u === "WARRANTY DEED") return "Warranty Deed";
-  if (u == "TD") return "Tax Deed";
-  if (u == "TAX DEED") return "Tax Deed";
-  if (u == "QC") return "Quitclaim Deed";
-  if (u == "QUITCLAIM DEED") return "Quitclaim Deed";
-  if (u == "SW") return "Special Warranty Deed";
-  if (u == "SPECIAL WARRANTY DEED") return "Special Warranty Deed";
+  if (u === "TD") return "Tax Deed";
+  if (u === "TAX DEED") return "Tax Deed";
+  if (u === "QC") return "Quitclaim Deed";
+  if (u === "QUITCLAIM DEED") return "Quitclaim Deed";
+  if (u === "SW") return "Special Warranty Deed";
+  if (u === "SPECIAL WARRANTY DEED") return "Special Warranty Deed";
   return "Miscellaneous";
   // throw {
   //   type: "error",
@@ -1355,6 +1355,15 @@ function createGeometryClass(geometryInstances) {
     });
     geomIndex++;
   }
+}
+
+function titleCaseName(s) {
+  if (!s) return s;
+  return s
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function main() {

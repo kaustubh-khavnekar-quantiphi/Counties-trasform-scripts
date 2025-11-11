@@ -49,14 +49,28 @@ function cleanCandidate(t) {
   return normSpace(s);
 }
 
+function cleanInvalidCharsFromName(raw) {
+  let parsedName = normalizeWhitespace(raw)
+    .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
+    .replace(/[^A-Za-z\-', .]/g, "") // Only keep valid characters
+    .trim();
+  while (/^[\-', .]/i.test(parsedName)) { // Cannot start or end with special characters
+    parsedName = parsedName.slice(1);
+  }
+  while (/[\-', .]$/i.test(parsedName)) { // Cannot start or end with special characters
+    parsedName = parsedName.slice(0, parsedName.length - 1);
+  }
+  return parsedName;
+}
+
 // Split full personal name into parts
 function splitPersonName(name) {
   const cleaned = normSpace(name.replace(/&/g, " "));
   const parts = cleaned.split(/\s+/).filter(Boolean);
   if (parts.length < 2) return null;
-  const first_name = parts[0];
-  const last_name = parts[parts.length - 1];
-  const middle = parts.slice(1, -1).join(" ");
+  const first_name = cleanInvalidCharsFromName(parts[0]);
+  const last_name = cleanInvalidCharsFromName(parts[parts.length - 1]);
+  const middle = cleanInvalidCharsFromName(parts.slice(1, -1).join(" "));
   return {
     type: "person",
     first_name: first_name || null,
