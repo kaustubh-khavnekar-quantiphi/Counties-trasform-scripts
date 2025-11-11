@@ -1468,6 +1468,11 @@ function main() {
   propertyOut.structure_form = propertyMapping.structure_form,
   propertyOut.property_usage_type = propertyMapping.property_usage_type,
   writeOut("property.json", propertyOut);
+  writeOut("parcel.json", {parcel_identifier: parcelId || ""});
+  writeOut(`relationship_property_to_parcel.json`, {
+        from: { "/": `./property.json` },
+        to: { "/": `./parcel.json` },
+    });
 
   // SALES + DEEDS
   const salesRows = $("#details-Sales table tbody tr");

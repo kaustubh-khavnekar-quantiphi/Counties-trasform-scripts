@@ -323,6 +323,15 @@ function baseLayoutDefaults() {
   };
 }
 
+function readJson(p) {
+  try {
+    const raw = fs.readFileSync(p, "utf-8");
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
 function buildLayouts($) {
   const imps = parseImprovements($);
   const overallDetails = imps["overallDetails"];
@@ -513,7 +522,6 @@ function main() {
   const $ = readHtml();
   const pid = getPropertyId($);
   const layouts = buildLayouts($);
-
   const outDir = path.resolve("owners");
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
