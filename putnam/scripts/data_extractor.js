@@ -1114,8 +1114,6 @@ function extractAddress(addressDetails, unnorm) {
   const siteAddress = addressDetails.siteAddress;
   if (mailingAddress) {
     const mailingAddressObj = {
-      latitude: null,
-      longitude: null,
       unnormalized_address: mailingAddress,
     };
     writeOut("mailing_address.json", mailingAddressObj);
@@ -1124,8 +1122,6 @@ function extractAddress(addressDetails, unnorm) {
   if (siteAddress) {
     const addressObj = {
       county_name,
-      latitude: unnorm && unnorm.latitude ? unnorm.latitude : null,
-      longitude: unnorm && unnorm.longitude ? unnorm.longitude : null,
       township: null,
       range: null,
       section: null,
@@ -1158,7 +1154,208 @@ function mapInstrumentToDeedType(instr) {
   //   path: "deed.deed_type",
   // };
 }
+/**
+ * Minimal Geometry model that mirrors the Elephant Geometry class.
+ */
+class Geometry {
+  constructor({ latitude, longitude, polygon }) {
+    this.latitude = latitude ?? null;
+    this.longitude = longitude ?? null;
+    this.polygon = polygon ?? null;
+  }
 
+  /**
+   * Build a Geometry instance from a CSV record.
+   */
+  static fromRecord(record) {
+    return new Geometry({
+      latitude: toNumber(record.latitude),
+      longitude: toNumber(record.longitude),
+      polygon: parsePolygon(
+        record.parcel_polygon
+      )
+    });
+  }
+}
+
+const NORMALIZE_EOL_REGEX = /\r\n/g;
+
+function parseCsv(content) {
+  const rows = [];
+  let current = '';
+  let row = [];
+  let insideQuotes = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i];
+
+    if (char === '"') {
+      if (insideQuotes && content[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !insideQuotes) {
+      row.push(current);
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && content[i + 1] === '\n') {
+        i += 1;
+      }
+      row.push(current);
+      if (row.some((value) => value.length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length > 0 || row.length > 0) {
+    row.push(current);
+    if (row.some((value) => value.length > 0)) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function parsePolygon(value) {
+  if (!value) {
+    return null;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  if (isGeoJsonGeometry(parsed)) {
+    return parsed;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return null;
+  }
+
+  const depth = coordinatesDepth(parsed);
+  if (depth === 4) {
+    return { type: 'MultiPolygon', coordinates: parsed };
+  }
+
+  if (depth === 3) {
+    return { type: 'Polygon', coordinates: parsed };
+  }
+
+  if (depth === 2) {
+    return { type: 'Polygon', coordinates: [parsed] };
+  }
+
+  return null;
+}
+
+function coordinatesDepth(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return 0;
+  }
+
+  return 1 + coordinatesDepth(value[0]);
+}
+
+function isGeoJsonGeometry(value) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    (value.type === 'Polygon' || value.type === 'MultiPolygon') &&
+    Array.isArray(value.coordinates)
+  );
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const result = Number(value);
+  return Number.isFinite(result) ? result : null;
+}
+
+function splitGeometry(record) {
+  const baseGeometry = Geometry.fromRecord(record);
+  const { polygon } = baseGeometry;
+
+  if (!polygon || polygon.type !== 'MultiPolygon') {
+    return [baseGeometry];
+  }
+
+  return polygon.coordinates.map((coords, index) => {
+    const identifier = baseGeometry.request_identifier
+      ? `${baseGeometry.request_identifier}#${index + 1}`
+      : null;
+
+    return new Geometry({
+      latitude: baseGeometry.latitude,
+      longitude: baseGeometry.longitude,
+      polygon: {
+        type: 'Polygon',
+        coordinates: coords,
+      },
+      request_identifier: identifier,
+    });
+  });
+}
+
+/**
+ * Read the provided CSV file (defaults to ./input.csv) and return Geometry instances.
+ */
+function createGeometryInstances(csvContent) {
+
+  const rows = parseCsv(csvContent.replace(NORMALIZE_EOL_REGEX, '\n'));
+
+  if (!rows.length) {
+    return [];
+  }
+
+  const headers = rows[0].map((header) => header.trim());
+  const records = rows.slice(1).map((values) =>
+    headers.reduce((acc, header, index) => {
+      acc[header] = values[index] ?? '';
+      return acc;
+    }, {})
+  );
+
+  return records.flatMap((record) => splitGeometry(record));
+}
+
+function createGeometryClass(geometryInstances) {
+  let geomIndex = 1;
+  for(let geom of geometryInstances) {
+    const geometry = {
+      "latitude": geom.latitude,
+      "longitude": geom.longitude,
+      "polygon": geom.polygon.coordinates[0],
+    }
+    writeOut(`geometry_${geomIndex}.json`, geometry);
+    writeOut(`relationship_parcel_to_geometry_${geomIndex}.json`, {
+        from: { "/": `./parcel.json` },
+        to: { "/": `./geometry_${geomIndex}.json` },
+    });
+    geomIndex++;
+  }
+}
 
 function main() {
   const dataDir = path.join(".", "data");
@@ -1168,6 +1365,10 @@ function main() {
   const htmlPath = path.join(".", "input.html");
 
   const html = fs.readFileSync(htmlPath, "utf8");
+  const seedCsvPath = path.join(".", "input.csv");
+
+  const seedCsv = fs.readFileSync(seedCsvPath, "utf8");
+  createGeometryClass(createGeometryInstances(seedCsv));
   let unnorm = readJson("address.json");
   if (!unnorm) {
     unnorm = readJson("unnormalized_address.json");
@@ -1273,6 +1474,8 @@ function main() {
   let saleIndex = 0;
   let deedIndex = 0;
   let fileIndex = 0;
+  let latestSaleIndex = null;
+  let latestSaleDate = null;
 
   for (let i = 0; i < salesRows.length; i++) {
     const tr = salesRows[i];
@@ -1288,6 +1491,20 @@ function main() {
 
     saleIndex += 1;
     const saleObj = { ownership_transfer_date: saleDate || null };
+    if (!latestSaleIndex) {
+      latestSaleIndex = saleIndex;
+      latestSaleDate = saleDate;
+    } else if(!latestSaleDate && saleDate) {
+      latestSaleIndex = saleIndex;
+      latestSaleDate = saleDate;
+    } else if(saleDate) {
+      const latestSaleDateParsed = Date.parse(latestSaleDate);
+      const saleDateParsed = Date.parse(saleDate);
+      if (saleDateParsed && latestSaleDateParsed && saleDateParsed > latestSaleDateParsed) {
+        latestSaleIndex = saleIndex;
+        latestSaleDate = saleDate;
+      }
+    }
     if (price && price > 0) saleObj.purchase_price_amount = price;
     const saleName = `sales_${saleIndex}.json`;
     // saleFiles.push({ name: saleName, date: saleDate, instrument, book, page });
@@ -1500,9 +1717,6 @@ function main() {
         ? ownersData[ownersKey].owners_by_date || []
         : [];
     if (ownersByDate) {
-      // Relationships: link sale to owners present on that date (both persons and companies)
-        let relPersonCounter = 0;
-        let relCompanyCounter = 0;
         const personMap = new Map();
         Object.values(ownersByDate).forEach((arr) => {
           (arr || []).forEach((o) => {
@@ -1534,7 +1748,26 @@ function main() {
         }));
         let loopIdx = 1;
         for (const p of people) {
-          writeOut(`person_${loopIdx++}.json`, p);
+          writeOut(`person_${loopIdx}.json`, p);
+          if (latestSaleIndex) {
+            writeOut(
+              `relationship_sales_person_${loopIdx}.json`,
+              {
+                to: { "/": `./person_${loopIdx}.json` },
+                from: { "/": `./sales_${latestSaleIndex}.json` },
+              },
+            );
+          }
+          if (hasOwnerMailingAddress) {
+            writeOut(
+                `relationship_person_has_mailing_address_${loopIdx}.json`,
+              {
+                from: { "/": `./person_${loopIdx}.json` },
+                to: { "/": `./mailing_address.json` },
+              },
+            );
+          }
+          loopIdx++;
         }
         const companyNames = new Set();
         Object.values(ownersByDate).forEach((arr) => {
@@ -1548,7 +1781,26 @@ function main() {
         }));
         loopIdx = 1;
         for (const c of companies) {
-          writeOut(`company_${loopIdx++}.json`, c);
+          writeOut(`company_${loopIdx}.json`, c);
+          if (latestSaleIndex) {
+            writeOut(
+              `relationship_sales_company_${loopIdx}.json`,
+              {
+                to: { "/": `./company_${loopIdx}.json` },
+                from: { "/": `./sales_${latestSaleIndex}.json` },
+              },
+            );
+          }
+          if (hasOwnerMailingAddress) {
+            writeOut(
+                `relationship_company_has_mailing_address_${loopIdx}.json`,
+              {
+                from: { "/": `./company_${loopIdx}.json` },
+                to: { "/": `./mailing_address.json` },
+              },
+            );
+          }
+          loopIdx++;
         }
     }
   }
