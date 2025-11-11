@@ -1343,10 +1343,14 @@ function createGeometryInstances(csvContent) {
 function createGeometryClass(geometryInstances) {
   let geomIndex = 1;
   for(let geom of geometryInstances) {
+    let polygon = [];
+    for (const coordinate of geom.polygon.coordinates[0]) {
+      polygon.push({"longitude": coordinate[0], "latitude": coordinate[1]})
+    }
     const geometry = {
       "latitude": geom.latitude,
       "longitude": geom.longitude,
-      "polygon": geom.polygon.coordinates[0],
+      "polygon": polygon,
     }
     writeOut(`geometry_${geomIndex}.json`, geometry);
     writeOut(`relationship_parcel_to_geometry_${geomIndex}.json`, {
