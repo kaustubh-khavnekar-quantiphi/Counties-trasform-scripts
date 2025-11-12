@@ -1344,6 +1344,9 @@ function createGeometryClass(geometryInstances) {
   let geomIndex = 1;
   for(let geom of geometryInstances) {
     let polygon = [];
+    if (!geom || !geom.polygon) {
+      continue;
+    }
     for (const coordinate of geom.polygon.coordinates[0]) {
       polygon.push({"longitude": coordinate[0], "latitude": coordinate[1]})
     }
