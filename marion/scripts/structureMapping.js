@@ -84,7 +84,6 @@ function buildStructure($, html) {
     finished_base_area: gfa || null,
     exterior_wall_material_primary: extPrimary || null,
     exterior_wall_material_secondary: extSecondary || null,
-    exterior_wall_condition: extPrimary ? "Fair" : null
   };
 
   return { id: primeKey, data };
@@ -105,6 +104,6 @@ function buildStructure($, html) {
   ensureDir(dataDir);
 
   fs.writeFileSync(path.join(ownersDir, "structure_data.json"), JSON.stringify(outObj, null, 2));
-  fs.writeFileSync(path.join(dataDir, "structure_data.json"), JSON.stringify(outObj, null, 2));
+  // fs.writeFileSync(path.join(dataDir, "structure_data.json"), JSON.stringify(outObj, null, 2));
   console.log(`Wrote structure data for property_${id} to owners/ and data/`);
 })();
