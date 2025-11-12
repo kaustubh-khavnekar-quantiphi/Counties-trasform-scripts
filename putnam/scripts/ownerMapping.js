@@ -49,6 +49,13 @@ function cleanCandidate(t) {
   return normSpace(s);
 }
 
+function normalizeWhitespace(str) {
+  return (str || "")
+    .replace(/\s+/g, " ")
+    .replace(/[\u00A0\s]+/g, " ")
+    .trim();
+}
+
 function cleanInvalidCharsFromName(raw) {
   let parsedName = normalizeWhitespace(raw)
     .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
