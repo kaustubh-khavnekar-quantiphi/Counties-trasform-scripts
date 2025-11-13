@@ -622,7 +622,6 @@ function parseFloatOrNull(val) {
 
 function createEmptyStructureRecord() {
   return {
-    property_structure_built_year: null,
     number_of_stories: null,
     finished_base_area: null,
     exterior_wall_material_primary: null,
@@ -699,7 +698,6 @@ function buildStructure($) {
     const characteristics = parsedBuilding.characteristics || {};
     const record = createEmptyStructureRecord();
 
-    record.property_structure_built_year = parseIntOrNull(characteristics.yearBuilt);
     record.number_of_stories = parseFloatOrNull(typeRow.stories);
     record.finished_base_area = parseIntOrNull(typeRow.groundFloorArea);
     record.exterior_wall_material_primary = mapFieldValue(
