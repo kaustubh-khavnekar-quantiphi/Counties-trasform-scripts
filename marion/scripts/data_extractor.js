@@ -917,39 +917,40 @@ function main() {
     if (inst.includes("SPECIAL WARRANTY")) deed_type = "Special Warranty Deed";
     else if (inst.includes("WARRANTY")) deed_type = "Warranty Deed";
     else if (inst.includes("QUIT")) deed_type = "Quitclaim Deed";
+    else deed_type = "Miscellaneous";
 
     // if (deed_type) {
-      deedIdx += 1;
-      const deedPath = path.join(dataDir, `deed_${deedIdx}.json`);
-      let deed = { deed_type }
-      if (s.bookPage && s.bookPage.split("/").length === 2) {
-        deed.book = s.bookPage.split("/")[0];
-        deed.page = s.bookPage.split("/")[1];
-      }
-      writeJSON(deedPath, deed);
-      saleToDeed.push({ saleIndex: idx + 1, deedIndex: deedIdx });
+    deedIdx += 1;
+    const deedPath = path.join(dataDir, `deed_${deedIdx}.json`);
+    let deed = { deed_type }
+    if (s.bookPage && s.bookPage.split("/").length === 2) {
+      deed.book = s.bookPage.split("/")[0];
+      deed.page = s.bookPage.split("/")[1];
+    }
+    writeJSON(deedPath, deed);
+    saleToDeed.push({ saleIndex: idx + 1, deedIndex: deedIdx });
 
-      if (s.url) {
-        fileIdx += 1;
-        let document_type = null;
-        const fileObj = {
-          document_type: document_type,
-          file_format: null,
-          ipfs_url: null,
-          name: s.bookPage || null,
-          original_url: encodeURI(s.url) || null,
-        };
-        const filePath = path.join(dataDir, `file_${fileIdx}.json`);
-        writeJSON(filePath, fileObj);
-        const relDF = {
-          from: { "/": `./deed_${deedIdx}.json` },
-          to: { "/": `./file_${fileIdx}.json` },
-        };
-        writeJSON(
-          path.join(dataDir, `relationship_deed_file_${fileIdx}.json`),
-          relDF,
-        );
-      }
+    if (s.url) {
+      fileIdx += 1;
+      let document_type = null;
+      const fileObj = {
+        document_type: document_type,
+        file_format: null,
+        ipfs_url: null,
+        name: s.bookPage || null,
+        original_url: encodeURI(s.url) || null,
+      };
+      const filePath = path.join(dataDir, `file_${fileIdx}.json`);
+      writeJSON(filePath, fileObj);
+      const relDF = {
+        from: { "/": `./deed_${deedIdx}.json` },
+        to: { "/": `./file_${fileIdx}.json` },
+      };
+      writeJSON(
+        path.join(dataDir, `relationship_deed_file_${fileIdx}.json`),
+        relDF,
+      );
+    }
     // }
   });
 
