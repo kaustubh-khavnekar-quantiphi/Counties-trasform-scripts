@@ -269,7 +269,7 @@ function buildPersonFields(lastName, restTokens) {
   };
 
   if (middle && TitleCase(cleanInvalidCharsFromName(middle))) {
-    result.middle_name = middle;
+    result.middle_name = TitleCase(cleanInvalidCharsFromName(middle));
   }
   if (result.first_name && result.last_name) {
     return result
