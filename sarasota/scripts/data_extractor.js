@@ -2958,7 +2958,7 @@ function main() {
     lot_type: null,
     lot_length_feet: null,
     lot_width_feet: null,
-    lot_area_sqft: parsedPropertyAttributes.landArea ? parseIntOrNull(parsedPropertyAttributes.landArea) : null,
+    lot_area_sqft: parsedPropertyAttributes.landArea && parseIntOrNull(parsedPropertyAttributes.landArea) >= 1 ? parseIntOrNull(parsedPropertyAttributes.landArea) : null,
     landscaping_features: null,
     view: null,
     fencing_type: null,

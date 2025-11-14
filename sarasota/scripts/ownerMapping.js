@@ -268,7 +268,7 @@ function buildPersonFields(lastName, restTokens) {
     last_name: TitleCase(cleanInvalidCharsFromName(lastName)),
   };
 
-  if (middle) {
+  if (middle && TitleCase(cleanInvalidCharsFromName(middle))) {
     result.middle_name = middle;
   }
   if (result.first_name && result.last_name) {
