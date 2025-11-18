@@ -1195,6 +1195,13 @@ function extractTaxes($) {
             block.land = parsed;
           }
         }
+        if (/Ag\s*Land/i.test(label)) {
+          const parsed = parseMoney(val);
+          if (parsed !== null) {
+            hasNumericValue = true;
+            block.agLand = parsed;
+          }
+        }
         if (/Building/i.test(label)) {
           const parsed = parseMoney(val);
           if (parsed !== null) {
@@ -1235,17 +1242,21 @@ function extractTaxes($) {
   const b2024 = extractBlock("2024 Certified Values");
   const appendTaxEntry = (block, year) => {
     if (!block) return;
-    const entry = { tax_year: year };
-    const assignIfNumber = (key, value) => {
-      if (typeof value === "number" && Number.isFinite(value)) {
-        entry[key] = value;
-      }
+    const toMoney = (value) =>
+      typeof value === "number" && Number.isFinite(value) ? value : null;
+    const landValueCandidate =
+      block.land !== undefined ? block.land : block.agLand;
+    const entry = {
+      tax_year: year ?? null,
+      property_assessed_value_amount: toMoney(block.assessed),
+      property_market_value_amount: toMoney(block.just),
+      property_building_amount: toMoney(block.building),
+      property_land_amount: toMoney(landValueCandidate),
+      property_taxable_value_amount: toMoney(block.taxable),
+      monthly_tax_amount: toMoney(block.monthly),
+      period_start_date: year ? `${year}-01-01` : null,
+      period_end_date: year ? `${year}-12-31` : null,
     };
-    assignIfNumber("property_assessed_value_amount", block.assessed);
-    assignIfNumber("property_market_value_amount", block.just);
-    assignIfNumber("property_building_amount", block.building);
-    assignIfNumber("property_land_amount", block.land);
-    assignIfNumber("property_taxable_value_amount", block.taxable);
     const requiredKeys = [
       "property_assessed_value_amount",
       "property_market_value_amount",
@@ -1254,9 +1265,12 @@ function extractTaxes($) {
       "property_taxable_value_amount",
     ];
     const hasAllRequired = requiredKeys.every((key) =>
-      Object.prototype.hasOwnProperty.call(entry, key),
+      entry[key] !== null,
     );
     if (hasAllRequired) {
+      if (entry.monthly_tax_amount === undefined) {
+        entry.monthly_tax_amount = null;
+      }
       taxes.push(entry);
     }
   };
