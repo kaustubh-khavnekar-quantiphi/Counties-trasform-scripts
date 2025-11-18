@@ -1196,50 +1196,30 @@ function extractTaxes($) {
   }
 
   const b2024 = extractBlock("2024 Certified Values");
-  if (b2024) {
-    taxes.push({
-      tax_year: 2024,
-      property_assessed_value_amount: b2024.assessed ?? null,
-      property_market_value_amount: b2024.just ?? null,
-      property_building_amount: b2024.building ?? null,
-      property_land_amount: b2024.land ?? null,
-      property_taxable_value_amount: b2024.taxable ?? null,
-      monthly_tax_amount: null,
-      period_start_date: null,
-      period_end_date: null,
-    });
-  }
+  const appendTaxEntry = (block, year) => {
+    if (!block) return;
+    const entry = { tax_year: year };
+    const assignIfNumber = (key, value) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        entry[key] = value;
+      }
+    };
+    assignIfNumber("property_assessed_value_amount", block.assessed);
+    assignIfNumber("property_market_value_amount", block.just);
+    assignIfNumber("property_building_amount", block.building);
+    assignIfNumber("property_land_amount", block.land);
+    assignIfNumber("property_taxable_value_amount", block.taxable);
+    taxes.push(entry);
+  };
+
+  appendTaxEntry(b2024, 2024);
   let b2025 = extractBlock("2025 Certified Values");
   if (!b2025) {
     b2025 = extractBlock("2025 Preliminary Certified");
   }
-  if (b2025) {
-    taxes.push({
-      tax_year: 2025,
-      property_assessed_value_amount: b2025.assessed ?? null,
-      property_market_value_amount: b2025.just ?? null,
-      property_building_amount: b2025.building ?? null,
-      property_land_amount: b2025.land ?? null,
-      property_taxable_value_amount: b2025.taxable ?? null,
-      monthly_tax_amount: null,
-      period_start_date: null,
-      period_end_date: null,
-    });
-  }
+  appendTaxEntry(b2025, 2025);
   const b2026 = extractBlock("2026 Working Values");
-  if (b2026) {
-    taxes.push({
-      tax_year: 2026,
-      property_assessed_value_amount: b2026.assessed ?? null,
-      property_market_value_amount: b2026.just ?? null,
-      property_building_amount: b2026.building ?? null,
-      property_land_amount: b2026.land ?? null,
-      property_taxable_value_amount: b2026.taxable ?? null,
-      monthly_tax_amount: null,
-      period_start_date: null,
-      period_end_date: null,
-    });
-  }
+  appendTaxEntry(b2026, 2026);
   return taxes;
 }
 
