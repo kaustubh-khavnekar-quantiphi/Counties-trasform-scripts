@@ -1129,7 +1129,7 @@ function extractOwnerMailingAddress($) {
 
 function attemptWriteAddress(unnorm, secTwpRng, siteAddress, mailingAddress) {
   let hasOwnerMailingAddress = false;
-  const inputCounty = (unnorm.county_jurisdiction || "").trim();
+  let inputCounty = (unnorm.county_jurisdiction || "").trim();
   if (!inputCounty) {
     inputCounty = (unnorm.county_name || "").trim();
   }
@@ -1176,23 +1176,60 @@ function extractTaxes($) {
     // Rows: find labels and values
     const rows = table.find("tr");
     const block = {};
+    let hasNumericValue = false;
+    const noteCell = rows
+      .find("td")
+      .filter((_, td) => /not\s+available/i.test($(td).text()));
+    if (noteCell.length) {
+      return null;
+    }
     rows.each((i, tr) => {
       const tds = $(tr).find("td");
       if (tds.length >= 2) {
         const label = getText($(tds[0]));
         const val = getText($(tds[1]));
-        if (/Mkt\s*Land/i.test(label)) block.land = parseMoney(val);
-        if (/Building/i.test(label)) block.building = parseMoney(val);
-        if (/Just$/i.test(label)) block.just = parseMoney(val);
-        if (/Assessed/i.test(label)) block.assessed = parseMoney(val);
+        if (/Mkt\s*Land/i.test(label)) {
+          const parsed = parseMoney(val);
+          if (parsed !== null) {
+            hasNumericValue = true;
+            block.land = parsed;
+          }
+        }
+        if (/Building/i.test(label)) {
+          const parsed = parseMoney(val);
+          if (parsed !== null) {
+            hasNumericValue = true;
+            block.building = parsed;
+          }
+        }
+        if (/Just$/i.test(label)) {
+          const parsed = parseMoney(val);
+          if (parsed !== null) {
+            hasNumericValue = true;
+            block.just = parsed;
+          }
+        }
+        if (/Assessed/i.test(label) || /Appraised/i.test(label)) {
+          const parsed = parseMoney(val);
+          if (parsed !== null) {
+            hasNumericValue = true;
+            block.assessed = parsed;
+          }
+        }
         if (/Total\s*Taxable/i.test(label)) {
           // inside this td there are multiple labels; extract first number
           const m = val.match(/\$[\d,]+(\.\d{2})?/);
-          block.taxable = m ? parseMoney(m[0]) : null;
+          if (m) {
+            const parsed = parseMoney(m[0]);
+            if (parsed !== null) {
+              hasNumericValue = true;
+              block.taxable = parsed;
+            }
+          }
         }
       }
     });
-    return block;
+    return hasNumericValue ? block : null;
   }
 
   const b2024 = extractBlock("2024 Certified Values");
@@ -1209,7 +1246,19 @@ function extractTaxes($) {
     assignIfNumber("property_building_amount", block.building);
     assignIfNumber("property_land_amount", block.land);
     assignIfNumber("property_taxable_value_amount", block.taxable);
-    taxes.push(entry);
+    const requiredKeys = [
+      "property_assessed_value_amount",
+      "property_market_value_amount",
+      "property_building_amount",
+      "property_land_amount",
+      "property_taxable_value_amount",
+    ];
+    const hasAllRequired = requiredKeys.every((key) =>
+      Object.prototype.hasOwnProperty.call(entry, key),
+    );
+    if (hasAllRequired) {
+      taxes.push(entry);
+    }
   };
 
   appendTaxEntry(b2024, 2024);
@@ -1620,9 +1669,7 @@ function main() {
         const file = {
           document_type: null,
           file_format: null,
-          ipfs_url: null,
           name: s.bookPage ? `Deed ${s.bookPage}` : "Deed Document",
-          original_url: s.link || null,
         };
         writeJson(path.join("data", `file_${i + 1}.json`), file);
         const deedFileRelName = `relationship_deed_file${suffix}.json`;
