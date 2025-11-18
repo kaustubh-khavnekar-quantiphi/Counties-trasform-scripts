@@ -1349,77 +1349,214 @@ function extractOwners(ownerData, outDir, parcelId, salesCount, hasOwnerMailingA
   return result;
 }
 
-function extractUtility(utilsData, outDir, parcelId) {
-  const key = `property_${parcelId}`;
-  const u = utilsData[key];
-  if (!u) return;
-  const requiredKeys = [
-    "cooling_system_type",
-    "heating_system_type",
-    "public_utility_type",
-    "sewer_type",
-    "water_source_type",
-    "plumbing_system_type",
-    "plumbing_system_type_other_description",
-    "electrical_panel_capacity",
-    "electrical_wiring_type",
-    "hvac_condensing_unit_present",
-    "electrical_wiring_type_other_description",
-    "solar_panel_present",
-    "solar_panel_type",
-    "solar_panel_type_other_description",
-    "smart_home_features",
-    "smart_home_features_other_description",
-    "hvac_unit_condition",
-    "solar_inverter_visible",
-    "hvac_unit_issues",
-  ];
-  const out = {};
-  requiredKeys.forEach((k) => {
-    out[k] = u[k] !== undefined ? u[k] : null;
-  });
-  [
-    "electrical_panel_installation_date",
-    "electrical_rewire_date",
-    "hvac_capacity_kw",
-    "hvac_capacity_tons",
-    "hvac_equipment_component",
-    "hvac_equipment_manufacturer",
-    "hvac_equipment_model",
-    "hvac_installation_date",
-    "hvac_seer_rating",
-    "hvac_system_configuration",
-    "plumbing_system_installation_date",
-    "sewer_connection_date",
-    "solar_installation_date",
-    "solar_inverter_installation_date",
-    "solar_inverter_manufacturer",
-    "solar_inverter_model",
-    "water_connection_date",
-    "water_heater_installation_date",
-    "water_heater_manufacturer",
-    "water_heater_model",
-    "well_installation_date",
-  ].forEach((k) => {
-    if (u[k] !== undefined) out[k] = u[k];
-  });
-  writeJSON(path.join(outDir, "utility.json"), out);
+
+/**
+ * Minimal Geometry model that mirrors the Elephant Geometry class.
+ */
+class Geometry {
+  constructor({ latitude, longitude, polygon }) {
+    this.latitude = latitude ?? null;
+    this.longitude = longitude ?? null;
+    this.polygon = polygon ?? null;
+  }
+
+  /**
+   * Build a Geometry instance from a CSV record.
+   */
+  static fromRecord(record) {
+    return new Geometry({
+      latitude: toNumber(record.latitude),
+      longitude: toNumber(record.longitude),
+      polygon: parsePolygon(
+        record.parcel_polygon
+      )
+    });
+  }
 }
 
-function extractLayout(layoutData, outDir, parcelId) {
-  const key = `property_${parcelId}`;
-  const entry = layoutData[key];
-  if (!entry || !Array.isArray(entry.layouts)) return;
-  entry.layouts.forEach((l, idx) => {
-    writeJSON(path.join(outDir, `layout_${idx + 1}.json`), l);
+const NORMALIZE_EOL_REGEX = /\r\n/g;
+
+function parseCsv(content) {
+  const rows = [];
+  let current = '';
+  let row = [];
+  let insideQuotes = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i];
+
+    if (char === '"') {
+      if (insideQuotes && content[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !insideQuotes) {
+      row.push(current);
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !insideQuotes) {
+      if (char === '\r' && content[i + 1] === '\n') {
+        i += 1;
+      }
+      row.push(current);
+      if (row.some((value) => value.length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length > 0 || row.length > 0) {
+    row.push(current);
+    if (row.some((value) => value.length > 0)) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function parsePolygon(value) {
+  if (!value) {
+    return null;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  if (isGeoJsonGeometry(parsed)) {
+    return parsed;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return null;
+  }
+
+  const depth = coordinatesDepth(parsed);
+  if (depth === 4) {
+    return { type: 'MultiPolygon', coordinates: parsed };
+  }
+
+  if (depth === 3) {
+    return { type: 'Polygon', coordinates: parsed };
+  }
+
+  if (depth === 2) {
+    return { type: 'Polygon', coordinates: [parsed] };
+  }
+
+  return null;
+}
+
+function coordinatesDepth(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return 0;
+  }
+
+  return 1 + coordinatesDepth(value[0]);
+}
+
+function isGeoJsonGeometry(value) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    (value.type === 'Polygon' || value.type === 'MultiPolygon') &&
+    Array.isArray(value.coordinates)
+  );
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const result = Number(value);
+  return Number.isFinite(result) ? result : null;
+}
+
+function splitGeometry(record) {
+  const baseGeometry = Geometry.fromRecord(record);
+  const { polygon } = baseGeometry;
+
+  if (!polygon || polygon.type !== 'MultiPolygon') {
+    return [baseGeometry];
+  }
+
+  return polygon.coordinates.map((coords, index) => {
+    const identifier = baseGeometry.request_identifier
+      ? `${baseGeometry.request_identifier}#${index + 1}`
+      : null;
+
+    return new Geometry({
+      latitude: baseGeometry.latitude,
+      longitude: baseGeometry.longitude,
+      polygon: {
+        type: 'Polygon',
+        coordinates: coords,
+      },
+      request_identifier: identifier,
+    });
   });
 }
 
-function extractStructure(structureData, outDir, parcelId) {
-  const key = `property_${parcelId}`;
-  const s = structureData[key];
-  if (!s) return;
-  writeJSON(path.join(outDir, "structure.json"), s);
+/**
+ * Read the provided CSV file (defaults to ./input.csv) and return Geometry instances.
+ */
+function createGeometryInstances(csvContent) {
+
+  const rows = parseCsv(csvContent.replace(NORMALIZE_EOL_REGEX, '\n'));
+
+  if (!rows.length) {
+    return [];
+  }
+
+  const headers = rows[0].map((header) => header.trim());
+  const records = rows.slice(1).map((values) =>
+    headers.reduce((acc, header, index) => {
+      acc[header] = values[index] ?? '';
+      return acc;
+    }, {})
+  );
+
+  return records.flatMap((record) => splitGeometry(record));
+}
+
+function createGeometryClass(geometryInstances) {
+  let geomIndex = 1;
+  for(let geom of geometryInstances) {
+    let polygon = [];
+    let geometry = {
+      "latitude": geom.latitude,
+      "longitude": geom.longitude,
+    }
+    if (geom && geom.polygon) {
+      for (const coordinate of geom.polygon.coordinates[0]) {
+        polygon.push({"longitude": coordinate[0], "latitude": coordinate[1]})
+      }
+      geometry.polygon = polygon;
+    }
+    writeJSON(path.join("data", `geometry_${geomIndex}.json`), geometry);
+    writeJSON(path.join("data", `relationship_parcel_to_geometry_${geomIndex}.json`), {
+        from: { "/": `./parcel.json` },
+        to: { "/": `./geometry_${geomIndex}.json` },
+    });
+    geomIndex++;
+  }
 }
 
 function extractLot($, outDir) {
@@ -1474,6 +1611,21 @@ function main() {
   const unAddr = readJSON(unAddrPath);
   const seed = readJSON(seedPath);
   const parcelId = seed.parcel_id || seed.request_identifier;
+  try {
+    const seedCsvPath = path.join(".", "input.csv");
+    const seedCsv = fs.readFileSync(seedCsvPath, "utf8");
+    createGeometryClass(createGeometryInstances(seedCsv));
+  } catch (e) {
+    const latitude = unAddr && unAddr.latitude ? unAddr.latitude : null;
+    const longitude = unAddr && unAddr.longitude ? unAddr.longitude : null;
+    if (latitude && longitude) {
+      const coordinate = new Geometry({
+        latitude: latitude,
+        longitude: longitude
+      });
+      createGeometryClass([coordinate]);
+    }
+  }
   let propertyObj;
   try {
     propertyObj = extractProperty($, parcelId);
