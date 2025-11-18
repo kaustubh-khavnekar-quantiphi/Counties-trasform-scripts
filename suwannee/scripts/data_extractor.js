@@ -1129,7 +1129,7 @@ function extractOwnerMailingAddress($) {
 
 function attemptWriteAddress(unnorm, secTwpRng, siteAddress, mailingAddress) {
   let hasOwnerMailingAddress = false;
-  let inputCounty = (unnorm.county_jurisdiction || "").trim();
+  const inputCounty = (unnorm.county_jurisdiction || "").trim();
   if (!inputCounty) {
     inputCounty = (unnorm.county_name || "").trim();
   }
@@ -1176,113 +1176,70 @@ function extractTaxes($) {
     // Rows: find labels and values
     const rows = table.find("tr");
     const block = {};
-    let hasNumericValue = false;
-    const noteCell = rows
-      .find("td")
-      .filter((_, td) => /not\s+available/i.test($(td).text()));
-    if (noteCell.length) {
-      return null;
-    }
     rows.each((i, tr) => {
       const tds = $(tr).find("td");
       if (tds.length >= 2) {
         const label = getText($(tds[0]));
         const val = getText($(tds[1]));
-        if (/Mkt\s*Land/i.test(label)) {
-          const parsed = parseMoney(val);
-          if (parsed !== null) {
-            hasNumericValue = true;
-            block.land = parsed;
-          }
-        }
-        if (/Ag\s*Land/i.test(label)) {
-          const parsed = parseMoney(val);
-          if (parsed !== null) {
-            hasNumericValue = true;
-            block.agLand = parsed;
-          }
-        }
-        if (/Building/i.test(label)) {
-          const parsed = parseMoney(val);
-          if (parsed !== null) {
-            hasNumericValue = true;
-            block.building = parsed;
-          }
-        }
-        if (/Just$/i.test(label)) {
-          const parsed = parseMoney(val);
-          if (parsed !== null) {
-            hasNumericValue = true;
-            block.just = parsed;
-          }
-        }
-        if (/Assessed/i.test(label) || /Appraised/i.test(label)) {
-          const parsed = parseMoney(val);
-          if (parsed !== null) {
-            hasNumericValue = true;
-            block.assessed = parsed;
-          }
-        }
+        if (/Mkt\s*Land/i.test(label)) block.land = parseMoney(val);
+        if (/Building/i.test(label)) block.building = parseMoney(val);
+        if (/Just$/i.test(label)) block.just = parseMoney(val);
+        if (/Assessed/i.test(label)) block.assessed = parseMoney(val);
         if (/Total\s*Taxable/i.test(label)) {
           // inside this td there are multiple labels; extract first number
           const m = val.match(/\$[\d,]+(\.\d{2})?/);
-          if (m) {
-            const parsed = parseMoney(m[0]);
-            if (parsed !== null) {
-              hasNumericValue = true;
-              block.taxable = parsed;
-            }
-          }
+          block.taxable = m ? parseMoney(m[0]) : null;
         }
       }
     });
-    return hasNumericValue ? block : null;
+    return block;
   }
 
   const b2024 = extractBlock("2024 Certified Values");
-  const appendTaxEntry = (block, year) => {
-    if (!block) return;
-    const toMoney = (value) =>
-      typeof value === "number" && Number.isFinite(value) ? value : null;
-    const landValueCandidate =
-      block.land !== undefined ? block.land : block.agLand;
-    const entry = {
-      tax_year: year ?? null,
-      property_assessed_value_amount: toMoney(block.assessed),
-      property_market_value_amount: toMoney(block.just),
-      property_building_amount: toMoney(block.building),
-      property_land_amount: toMoney(landValueCandidate),
-      property_taxable_value_amount: toMoney(block.taxable),
-      monthly_tax_amount: toMoney(block.monthly),
-      period_start_date: year ? `${year}-01-01` : null,
-      period_end_date: year ? `${year}-12-31` : null,
-    };
-    const requiredKeys = [
-      "property_assessed_value_amount",
-      "property_market_value_amount",
-      "property_building_amount",
-      "property_land_amount",
-      "property_taxable_value_amount",
-    ];
-    const hasAllRequired = requiredKeys.every((key) =>
-      entry[key] !== null,
-    );
-    if (hasAllRequired) {
-      if (entry.monthly_tax_amount === undefined) {
-        entry.monthly_tax_amount = null;
-      }
-      taxes.push(entry);
-    }
-  };
-
-  appendTaxEntry(b2024, 2024);
+  if (b2024) {
+    taxes.push({
+      tax_year: 2024,
+      property_assessed_value_amount: b2024.assessed ?? null,
+      property_market_value_amount: b2024.just ?? null,
+      property_building_amount: b2024.building ?? null,
+      property_land_amount: b2024.land ?? null,
+      property_taxable_value_amount: b2024.taxable ?? null,
+      monthly_tax_amount: null,
+      period_start_date: null,
+      period_end_date: null,
+    });
+  }
   let b2025 = extractBlock("2025 Certified Values");
   if (!b2025) {
     b2025 = extractBlock("2025 Preliminary Certified");
   }
-  appendTaxEntry(b2025, 2025);
+  if (b2025) {
+    taxes.push({
+      tax_year: 2025,
+      property_assessed_value_amount: b2025.assessed ?? null,
+      property_market_value_amount: b2025.just ?? null,
+      property_building_amount: b2025.building ?? null,
+      property_land_amount: b2025.land ?? null,
+      property_taxable_value_amount: b2025.taxable ?? null,
+      monthly_tax_amount: null,
+      period_start_date: null,
+      period_end_date: null,
+    });
+  }
   const b2026 = extractBlock("2026 Working Values");
-  appendTaxEntry(b2026, 2026);
+  if (b2026) {
+    taxes.push({
+      tax_year: 2026,
+      property_assessed_value_amount: b2026.assessed ?? null,
+      property_market_value_amount: b2026.just ?? null,
+      property_building_amount: b2026.building ?? null,
+      property_land_amount: b2026.land ?? null,
+      property_taxable_value_amount: b2026.taxable ?? null,
+      monthly_tax_amount: null,
+      period_start_date: null,
+      period_end_date: null,
+    });
+  }
   return taxes;
 }
 
@@ -1683,7 +1640,9 @@ function main() {
         const file = {
           document_type: null,
           file_format: null,
+          ipfs_url: null,
           name: s.bookPage ? `Deed ${s.bookPage}` : "Deed Document",
+          original_url: s.link || null,
         };
         writeJson(path.join("data", `file_${i + 1}.json`), file);
         const deedFileRelName = `relationship_deed_file${suffix}.json`;
