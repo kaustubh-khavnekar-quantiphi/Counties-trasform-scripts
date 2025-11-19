@@ -1141,7 +1141,12 @@ function main() {
       state_code: "FL",
       street_name: null,
       street_number: null,
-      street_suffix_type: null
+      street_suffix_type: null,
+      plus_four_postal_code: null,
+      street_post_directional_text: null,
+      street_pre_directional_text: null,
+      unit_identifier: null,
+      route_number: null,
     };
     writeJSON(path.join(dataDir, "address.json"), addressObj);
     writeJSON(path.join(dataDir, "relationship_property_has_address.json"), {
