@@ -1810,6 +1810,7 @@ function main() {
   }
 
   writeProperty($, parcelId);
+  writeJSON(path.join("data", "parcel.json"), {parcel_identifier: parcelId || ""});
   const sales = extractSales($);
   writeSalesDeedsFilesAndRelationships($);
 
