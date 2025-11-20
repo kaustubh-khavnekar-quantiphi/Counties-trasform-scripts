@@ -131,6 +131,7 @@ function buildStructureRecord($, buildings) {
     let interior_wall_structure_material_primary = null;
     let roof_covering_material = null;
     let flooring_material_primary = null;
+    let primary_framing_material = null;
     if (b["Exterior Walls"]) {
       const exteriorWallTokens = b["Exterior Walls"].split(/[,;]/);
       const exterior_wall_material_primary_arr = mapExteriorMaterials(exteriorWallTokens);
