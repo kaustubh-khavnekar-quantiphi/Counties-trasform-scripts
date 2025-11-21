@@ -1192,6 +1192,9 @@ function extractTaxes($) {
         }
       }
     });
+    if (!block.taxable) {
+      return null;
+    }
     return block;
   }
 
