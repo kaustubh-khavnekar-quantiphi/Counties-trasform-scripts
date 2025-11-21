@@ -1136,7 +1136,6 @@ function main() {
       lot: legalDescriptionParsedInfo.lot,
       city_name: null,
       country_code: "US",
-      county_name: null,
       postal_code: null,
       state_code: "FL",
       street_name: null,
