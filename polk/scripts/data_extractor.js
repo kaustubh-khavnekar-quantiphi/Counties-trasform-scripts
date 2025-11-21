@@ -3817,10 +3817,21 @@ function main() {
     unaddr.request_identifier ||
     "";
   const key = `property_${parcelId}`;
-  const seedCsvPath = path.join(".", "input.csv");
-  
-  const seedCsv = fs.readFileSync(seedCsvPath, "utf8");
-  createGeometryClass(createGeometryInstances(seedCsv));
+  try {
+    const seedCsvPath = path.join(".", "input.csv");
+    const seedCsv = fs.readFileSync(seedCsvPath, "utf8");
+    createGeometryClass(createGeometryInstances(seedCsv));
+  } catch (e) {
+    const latitude = unaddr && unaddr.latitude ? unaddr.latitude : null;
+    const longitude = unaddr && unaddr.longitude ? unaddr.longitude : null;
+    if (latitude && longitude) {
+      const coordinate = new Geometry({
+        latitude: latitude,
+        longitude: longitude
+      });
+      createGeometryClass([coordinate]);
+    }
+  }
   let struct = null;
   if (structureData) {
     struct = key && structureData[key] ? structureData[key] : null;
