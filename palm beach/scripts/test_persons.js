@@ -8,7 +8,7 @@ function readJSON(p) {
   }
 }
 const ownerJSON = readJSON('owners/owner_data.json');
-const parcelId = '00424414130060030';
+const parcelId = '00424414320040090';
 
 function toTitleCase(str) {
   if (!str) return '';
