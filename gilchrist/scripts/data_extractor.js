@@ -1375,6 +1375,47 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
         }
       });
   });
+
+  // Create relationship between current owner and first sale (sales_1) if not already linked to any sale
+  if (sales.length > 0) {
+    const currentOwners = ownersByDate["current"] || [];
+
+    currentOwners.forEach((owner) => {
+      if (owner.type === "person") {
+        const pIdx = findPersonIndexByName(owner.first_name, owner.last_name);
+        if (pIdx && !usedPersonIdx.has(pIdx)) {
+          usedPersonIdx.add(pIdx);
+          relPersonCounter++;
+          writeJSON(
+            path.join(
+              "data",
+              `relationship_sales_person_${relPersonCounter}.json`,
+            ),
+            {
+              to: { "/": `./person_${pIdx}.json` },
+              from: { "/": "./sales_1.json" },
+            },
+          );
+        }
+      } else if (owner.type === "company") {
+        const cIdx = findCompanyIndexByName(owner.name);
+        if (cIdx && !usedCompanyIdx.has(cIdx)) {
+          usedCompanyIdx.add(cIdx);
+          relCompanyCounter++;
+          writeJSON(
+            path.join(
+              "data",
+              `relationship_sales_company_${relCompanyCounter}.json`,
+            ),
+            {
+              to: { "/": `./company_${cIdx}.json` },
+              from: { "/": "./sales_1.json" },
+            },
+          );
+        }
+      }
+    });
+  }
   if (hasOwnerMailingAddress) {
     const currentOwner = ownersByDate["current"] || [];
     relPersonCounter = 0;
