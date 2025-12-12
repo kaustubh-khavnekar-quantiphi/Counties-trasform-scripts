@@ -1410,6 +1410,58 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
       }
     });
   }
+
+  // Step 3: Cleanup orphaned person/company files that don't have relationships
+  try {
+    const dataFiles = fs.readdirSync("data");
+
+    // Find all person and company files
+    const personFiles = dataFiles.filter(f => /^person_\d+\.json$/.test(f));
+    const companyFiles = dataFiles.filter(f => /^company_\d+\.json$/.test(f));
+
+    // Find all relationships that reference persons and companies
+    const referencedPersons = new Set();
+    const referencedCompanies = new Set();
+
+    dataFiles.forEach(f => {
+      if (f.startsWith("relationship_")) {
+        try {
+          const relPath = path.join("data", f);
+          const relData = JSON.parse(fs.readFileSync(relPath, "utf8"));
+
+          // Check 'from' and 'to' fields for references
+          if (relData.from && relData.from["/"]) {
+            const ref = relData.from["/"].replace("./", "");
+            if (/^person_\d+\.json$/.test(ref)) referencedPersons.add(ref);
+            if (/^company_\d+\.json$/.test(ref)) referencedCompanies.add(ref);
+          }
+          if (relData.to && relData.to["/"]) {
+            const ref = relData.to["/"].replace("./", "");
+            if (/^person_\d+\.json$/.test(ref)) referencedPersons.add(ref);
+            if (/^company_\d+\.json$/.test(ref)) referencedCompanies.add(ref);
+          }
+        } catch (e) {
+          // Skip malformed relationship files
+        }
+      }
+    });
+
+    // Delete orphaned person files
+    personFiles.forEach(f => {
+      if (!referencedPersons.has(f)) {
+        fs.unlinkSync(path.join("data", f));
+      }
+    });
+
+    // Delete orphaned company files
+    companyFiles.forEach(f => {
+      if (!referencedCompanies.has(f)) {
+        fs.unlinkSync(path.join("data", f));
+      }
+    });
+  } catch (e) {
+    // Ignore cleanup errors
+  }
 }
 
 function extractHistoricalValuation($) {
