@@ -3024,10 +3024,7 @@ function main() {
         improvementData.request_identifier = seedData.request_identifier;
       }
 
-      improvementData.source_http_request = {
-        url: imp.sourceUrl,
-        method: 'GET',
-      };
+      // Do not generate source_http_request - it will be populated by the process
       improvementData.permit_required = true;
       improvementData.contractor_type = 'Unknown';
 
