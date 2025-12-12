@@ -1268,13 +1268,30 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
     });
   } catch (e) {}
 
+  // First, determine which persons and companies will actually have relationships
+  // by checking if they match any sale date or are current owners
+  const saleDates = sales.map((rec) => parseDateToISO(rec.saleDate));
+  const currentOwners = ownersByDate["current"] || [];
+
   const personMap = new Map();
-  // Only include persons who are grantees (buyers) or current owners, not just grantors
+  const companyNames = new Set();
+
+  // Only include persons and companies who will have relationships
   Object.entries(ownersByDate).forEach(([dateKey, arr]) => {
     // Skip unknown_date entries as these are grantors who never became grantees
     if (dateKey.startsWith("unknown_date")) {
       return;
     }
+
+    // Check if this date matches a sale OR if owners are current owners
+    const dateMatchesSale = saleDates.includes(dateKey);
+    const isCurrentOwner = dateKey === "current";
+
+    // Only process if this date will result in relationships
+    if (!dateMatchesSale && !isCurrentOwner) {
+      return;
+    }
+
     (arr || []).forEach((o) => {
       if (o.type === "person") {
         const k = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
@@ -1289,9 +1306,12 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
           if (!existing.middle_name && o.middle_name)
             existing.middle_name = o.middle_name;
         }
+      } else if (o.type === "company" && (o.name || "").trim()) {
+        companyNames.add((o.name || "").trim().toUpperCase());
       }
     });
   });
+
   people = Array.from(personMap.values()).map((p) => ({
     first_name: p.first_name ? titleCaseName(p.first_name) : null,
     middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
@@ -1306,18 +1326,7 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
   people.forEach((p, idx) => {
     writeJSON(path.join("data", `person_${idx + 1}.json`), p);
   });
-  const companyNames = new Set();
-  // Only include companies who are grantees (buyers) or current owners, not just grantors
-  Object.entries(ownersByDate).forEach(([dateKey, arr]) => {
-    // Skip unknown_date entries as these are grantors who never became grantees
-    if (dateKey.startsWith("unknown_date")) {
-      return;
-    }
-    (arr || []).forEach((o) => {
-      if (o.type === "company" && (o.name || "").trim())
-        companyNames.add((o.name || "").trim().toUpperCase());
-    });
-  });
+
   companies = Array.from(companyNames).map((n) => ({
     name: n,
     request_identifier: parcelId,
