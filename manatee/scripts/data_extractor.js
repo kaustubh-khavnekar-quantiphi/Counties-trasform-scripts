@@ -2482,6 +2482,36 @@ function findCompanyIndexByName(name) {
   return null;
 }
 
+function removeUnusedOwnerFiles(usedPersonIdx, usedCompanyIdx) {
+  // Remove person files that weren't referenced
+  for (let i = 1; i <= people.length; i++) {
+    if (!usedPersonIdx.has(i)) {
+      try {
+        const filePath = path.join("data", `person_${i}.json`);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+  }
+
+  // Remove company files that weren't referenced
+  for (let i = 1; i <= companies.length; i++) {
+    if (!usedCompanyIdx.has(i)) {
+      try {
+        const filePath = path.join("data", `company_${i}.json`);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+  }
+}
+
 function titleCaseName(s) {
   if (!s) return null;
 
@@ -3178,7 +3208,7 @@ function main() {
               companyNames.add((o.name || "").trim().toUpperCase());
           });
         });
-        companies = Array.from(companyNames).map((n) => ({ 
+        companies = Array.from(companyNames).map((n) => ({
           name: n,
           request_identifier: parcel.parcel_identifier,
         }));
@@ -3186,6 +3216,11 @@ function main() {
         for (const c of companies) {
           writeOut(`company_${loopIdx++}.json`, c);
         }
+
+        // Track which person and company indices are actually used in relationships
+        const usedPersonIdx = new Set();
+        const usedCompanyIdx = new Set();
+
         loopIdx = 1;
         for (const [date, owner] of Object.entries(salesOwnerMapping)) {
           const ownersOnDate = ownersByDate[date] || [];
@@ -3194,6 +3229,7 @@ function main() {
             .forEach((o) => {
               const pIdx = findPersonIndexByName(o.first_name, o.last_name);
               if (pIdx) {
+                usedPersonIdx.add(pIdx);
                 relPersonCounter++;
                 writeJSON(
                   path.join(
@@ -3212,6 +3248,7 @@ function main() {
             .forEach((o) => {
               const cIdx = findCompanyIndexByName(o.name);
               if (cIdx) {
+                usedCompanyIdx.add(cIdx);
                 relCompanyCounter++;
                 writeJSON(
                   path.join(
@@ -3236,6 +3273,7 @@ function main() {
           .forEach((o) => {
             const pIdx = findPersonIndexByName(o.first_name, o.last_name);
             if (pIdx) {
+              usedPersonIdx.add(pIdx);
               relPersonCounter++;
               writeJSON(
                 path.join(
@@ -3254,6 +3292,7 @@ function main() {
           .forEach((o) => {
             const cIdx = findCompanyIndexByName(o.name);
             if (cIdx) {
+              usedCompanyIdx.add(cIdx);
               relCompanyCounter++;
               writeJSON(
                 path.join(
@@ -3268,6 +3307,9 @@ function main() {
             }
           });
         }
+
+        // Remove person and company files that weren't referenced by any relationship
+        removeUnusedOwnerFiles(usedPersonIdx, usedCompanyIdx);
     }
   }
 }
