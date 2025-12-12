@@ -1421,7 +1421,11 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
 
   // Step 3: Cleanup orphaned person/company files that don't have relationships
   try {
-    const dataFiles = fs.readdirSync("data");
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      return;
+    }
+    const dataFiles = fs.readdirSync(dataDir);
 
     // Find all person and company files
     const personFiles = dataFiles.filter(f => /^person_\d+\.json$/.test(f));
@@ -1434,7 +1438,7 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
     dataFiles.forEach(f => {
       if (f.startsWith("relationship_")) {
         try {
-          const relPath = path.join("data", f);
+          const relPath = path.join(dataDir, f);
           const relData = JSON.parse(fs.readFileSync(relPath, "utf8"));
 
           // Check 'from' and 'to' fields for references
@@ -1450,6 +1454,7 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
           }
         } catch (e) {
           // Skip malformed relationship files
+          console.error(`Error reading relationship file ${f}:`, e.message);
         }
       }
     });
@@ -1457,18 +1462,21 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
     // Delete orphaned person files
     personFiles.forEach(f => {
       if (!referencedPersons.has(f)) {
-        fs.unlinkSync(path.join("data", f));
+        console.log(`Removing orphaned person file: ${f}`);
+        fs.unlinkSync(path.join(dataDir, f));
       }
     });
 
     // Delete orphaned company files
     companyFiles.forEach(f => {
       if (!referencedCompanies.has(f)) {
-        fs.unlinkSync(path.join("data", f));
+        console.log(`Removing orphaned company file: ${f}`);
+        fs.unlinkSync(path.join(dataDir, f));
       }
     });
   } catch (e) {
-    // Ignore cleanup errors
+    // Log cleanup errors but don't fail
+    console.error("Cleanup error:", e.message);
   }
 }
 
