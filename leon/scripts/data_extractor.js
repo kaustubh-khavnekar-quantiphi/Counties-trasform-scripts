@@ -620,6 +620,14 @@ const propertyTypeMapping = [
     "property_type": "Building"
   },
   {
+    "property_usecode": "8700 - State",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
+  },
+  {
     "property_usecode": "8900 - Municipal",
     "ownership_estate_type": "FeeSimple",
     "build_status": "Improved",
