@@ -1175,6 +1175,14 @@ function writeProperty($, parcelId) {
   writeJSON(path.join("data", "property.json"), property);
 }
 
+function writeParcel(parcelId) {
+  const parcel = {
+    parcel_identifier: parcelId || "",
+    request_identifier: parcelId || "",
+  };
+  writeJSON(path.join("data", "parcel.json"), parcel);
+}
+
 function writeSalesDeedsFilesAndRelationships($) {
   const sales = extractSales($);
   // Remove old deed/file and sales_deed relationships if present to avoid duplicates
@@ -1859,6 +1867,7 @@ function main() {
     util = key && utilitiesData[key] ? utilitiesData[key] : null;
   }
 
+  writeParcel(parcelId);
   writeProperty($, parcelId);
   const sales = extractSales($);
   writeSalesDeedsFilesAndRelationships($);
