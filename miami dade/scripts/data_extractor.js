@@ -730,8 +730,8 @@ function areaStringOrNull(val) {
 }
 
 function loadInput() {
-  const jsonFilePath = path.join(__dirname, 'input.json');
-  const htmlFilePath = path.join(__dirname, 'input.html');
+  const jsonFilePath = path.join(process.cwd(), 'input.json');
+  const htmlFilePath = path.join(process.cwd(), 'input.html');
 
   try {
     // 1. Try to read input.json synchronously
