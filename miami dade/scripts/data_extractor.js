@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const cheerio = require("cheerio");
 
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -728,15 +729,50 @@ function areaStringOrNull(val) {
   return /\d{2,}/.test(s) ? s : null;
 }
 
+function loadInput() {
+  const jsonFilePath = path.join(__dirname, 'input.json');
+  const htmlFilePath = path.join(__dirname, 'input.html');
+
+  try {
+    // 1. Try to read input.json synchronously
+    const jsonData = fs.readFileSync(jsonFilePath, 'utf8');
+    return JSON.parse(jsonData);
+  } catch (jsonError) {
+    // If input.json doesn't exist or is unreadable, try input.html
+    if (jsonError.code === 'ENOENT' || jsonError instanceof SyntaxError) {
+      console.warn(`Could not read or parse input.json: ${jsonError.message}. Attempting to read from input.html.`);
+      try {
+        // 2. Read input.html synchronously
+        const htmlData = fs.readFileSync(htmlFilePath, 'utf8');
+
+        // Parse the HTML using Cheerio
+        const $ = cheerio.load(htmlData);
+        const preTagContent = $('pre').text(); // Get the text content of the <pre> tag
+
+        if (preTagContent) {
+          return JSON.parse(preTagContent);
+        } else {
+          throw new Error('No <pre> tag found or <pre> tag is empty in input.html');
+        }
+      } catch (htmlError) {
+        throw new Error(`Failed to read or parse JSON from input.html: ${htmlError.message}`);
+      }
+    } else {
+      // Re-throw other errors from input.json
+      throw new Error(`An unexpected error occurred while processing input.json: ${jsonError.message}`);
+    }
+  }
+}
+
 function main() {
-  const inputPath = path.join("input.json");
+  // const inputPath = path.join("input.json");
   const addrPath = path.join("unnormalized_address.json");
   const seedPath = path.join("property_seed.json");
   const ownersPath = path.join("owners", "owner_data.json");
   const utilsPath = path.join("owners", "utilities_data.json");
   const layoutPath = path.join("owners", "layout_data.json");
 
-  const input = readJson(inputPath);
+  const input = loadInput();
   const unAddr = readJson(addrPath);
   // seed not strictly needed for extraction by rules, but read to satisfy spec availability
   const seed = readJson(seedPath);
