@@ -1737,19 +1737,21 @@ function extractOwnerMailingAddress(parsed) {
 }
 
 function attemptWriteAddress(unnorm, siteAddress, mailingAddress) {
-  let hasOwnerMailingAddress = false;
   let inputCounty = (unnorm.county_jurisdiction || "").trim();
   if (!inputCounty) {
     inputCounty = (unnorm.county_name || "").trim();
   }
   const county_name = inputCounty || null;
+
+  // Don't write mailing_address.json yet - return it to be written later
+  // only if there are current owners to reference it
+  let mailingAddressObj = null;
   if (mailingAddress) {
-    const mailingAddressObj = {
+    mailingAddressObj = {
       unnormalized_address: mailingAddress,
     };
-    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
-    hasOwnerMailingAddress = true;
   }
+
   if (siteAddress) {
     const addressObj = {
       county_name,
@@ -1763,7 +1765,7 @@ function attemptWriteAddress(unnorm, siteAddress, mailingAddress) {
                 from: { "/": `./property.json` },
               });
   }
-  return hasOwnerMailingAddress;
+  return mailingAddressObj;
 }
 /**
  * Minimal Geometry model that mirrors the Elephant Geometry class.
@@ -2089,14 +2091,14 @@ function main() {
 
   const addressText = extractAddressText(parsed);
   const mailingAddress = extractOwnerMailingAddress(parsed);
-  const hasOwnerMailingAddress = attemptWriteAddress(unaddr, addressText, mailingAddress);
+  const mailingAddressObj = attemptWriteAddress(unaddr, addressText, mailingAddress);
 
   // Lot
   const lot = extractLot(parsed);
   if (lot) {
     writeJSON(path.join("data", "lot.json"), lot);
   }
-  
+
   // // Tax current year (from Value Summary)
   // const taxCurrent = extractTaxCurrent($);
   // if (taxCurrent.tax_year) {
@@ -2141,7 +2143,7 @@ function main() {
       //   deed.instrument_number = s.instrumentNumber;
       // }
       writeJSON(path.join("data", `deed_${idx + 1}.json`), deed);
-      
+
       let fileName = deed.book && deed.page ? `${deed.book}/${deed.page}` : null;
       const file = {
         document_type: "Title",
@@ -2177,7 +2179,12 @@ function main() {
   // Track which persons/companies are actually used in relationships
   const usedPersonIndices = new Set();
   const usedCompanyIndices = new Set();
-  if (hasOwnerMailingAddress) {
+
+  // Only write mailing_address.json if there are current owners to reference it
+  const hasCurrentOwners = pc.personCurrentOwners.length > 0 || pc.companyCurrentOwners.length > 0;
+  if (mailingAddressObj && hasCurrentOwners) {
+    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
+
     pc.personCurrentOwners.forEach((idx, i) => {
       usedPersonIndices.add(idx);
       writeJSON(
