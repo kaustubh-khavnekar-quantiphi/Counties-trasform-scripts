@@ -1009,19 +1009,11 @@ function extractOwnerMailingAddress(leonSummary) {
 }
 
 function attemptWriteAddress(unnorm, siteAddress, mailingAddress) {
-  let hasOwnerMailingAddress = false;
   const inputCounty = (unnorm.county_jurisdiction || "").trim();
   if (!inputCounty) {
     inputCounty = (unnorm.county_name || "").trim();
   }
   const county_name = inputCounty || null;
-  if (mailingAddress) {
-    const mailingAddressObj = {
-      unnormalized_address: mailingAddress,
-    };
-    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
-    hasOwnerMailingAddress = true;
-  }
   if (siteAddress) {
     const addressObj = {
       county_name,
@@ -1038,7 +1030,7 @@ function attemptWriteAddress(unnorm, siteAddress, mailingAddress) {
                 from: { "/": `./property.json` },
               });
   }
-  return hasOwnerMailingAddress;
+  return mailingAddress;
 }
 
 function mapDeedCode(code) {
@@ -1208,7 +1200,7 @@ function extractTax($, outDir) {
   });
 }
 
-function extractOwners(ownerData, outDir, parcelId, salesCount, hasOwnerMailingAddress) {
+function extractOwners(ownerData, outDir, parcelId, salesCount, mailingAddress) {
   const key = `property_${parcelId}`;
   const result = { owners: [] };
   if (!ownerData[key] || !ownerData[key].owners_by_date) return result;
@@ -1341,7 +1333,11 @@ function extractOwners(ownerData, outDir, parcelId, salesCount, hasOwnerMailingA
   }
   relIdxCompany = 1;
   relIdxPerson = 1;
-  if (hasOwnerMailingAddress) {
+  if (mailingAddress && currentFiles.length > 0) {
+    const mailingAddressObj = {
+      unnormalized_address: mailingAddress,
+    };
+    writeJSON(path.join(outDir, "mailing_address.json"), mailingAddressObj);
     currentFiles.forEach((f) => writeMailingAddressRel(f, 1));
   }
   // invalidFiles.forEach((f) => writeRel(f, 1));
@@ -1658,7 +1654,7 @@ function main() {
     // Address
   const addressText = extractAddressText(leonSummary);
   const mailingAddress = extractOwnerMailingAddress(leonSummary);
-  const hasOwnerMailingAddress = attemptWriteAddress(unAddr, addressText, mailingAddress);
+  attemptWriteAddress(unAddr, addressText, mailingAddress);
   // writeJSON(path.join(outDir, "address.json"), addressObj);
 
   const salesCount = extractSalesAndDeeds($, outDir);
@@ -1666,7 +1662,7 @@ function main() {
   extractTax($, outDir);
 
   const ownerData = readJSON(ownerPath);
-  extractOwners(ownerData, outDir, parcelId, salesCount, hasOwnerMailingAddress);
+  extractOwners(ownerData, outDir, parcelId, salesCount, mailingAddress);
 
   const utilsData = readJSON(utilsPath);
   const layoutData = readJSON(layoutPath);
