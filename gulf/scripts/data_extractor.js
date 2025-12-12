@@ -1254,14 +1254,8 @@ function titleCaseName(s) {
 }
 
 function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailingAddress) {
-  const owners = readJSON(path.join("owners", "owner_data.json"));
-  if (!owners) return;
-  const key = `property_${parcelId}`;
-  const record = owners[key];
-  if (!record || !record.owners_by_date) return;
-  const ownersByDate = record.owners_by_date;
-
   // Remove old person/company files and their relationships to avoid orphaned files
+  // This runs BEFORE checking for owners data to clean up orphaned files from previous runs
   try {
     fs.readdirSync("data").forEach((f) => {
       if (
@@ -1276,6 +1270,13 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
       }
     });
   } catch (e) {}
+
+  const owners = readJSON(path.join("owners", "owner_data.json"));
+  if (!owners) return;
+  const key = `property_${parcelId}`;
+  const record = owners[key];
+  if (!record || !record.owners_by_date) return;
+  const ownersByDate = record.owners_by_date;
 
   // Maps to track created entities: key -> entity data
   const personMap = new Map(); // key: "FIRSTNAME|LASTNAME" -> person data
