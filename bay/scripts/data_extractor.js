@@ -2257,11 +2257,17 @@ function findCompanyIndexByName(name) {
 
 function titleCaseName(s) {
   if (!s) return s;
-  return s
+  const trimmed = String(s).trim();
+  if (!trimmed) return null;
+  const result = trimmed
     .toLowerCase()
     .split(/\s+/)
+    .filter((part) => part.length > 0)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+  if (!result || result.length === 0) return null;
+  if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
+  return result;
 }
 
 function writePersonCompaniesSalesRelationships(
