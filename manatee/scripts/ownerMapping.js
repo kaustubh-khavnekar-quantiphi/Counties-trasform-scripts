@@ -111,6 +111,9 @@ function normalizeWhitespace(str) {
 function cleanInvalidCharsFromName(raw) {
   let parsedName = normalizeWhitespace(raw)
     .replace(/\([^)]*\)/g, '') // Remove anything in parentheses
+    .replace(/\*/g, '') // Remove asterisks
+    .replace(/\bLE\b/g, '') // Remove "LE" suffix
+    .replace(/\bAS\s+SUCC\b/gi, '') // Remove "AS SUCC" suffix
     .replace(/[^A-Za-z\-' .]/g, "") // Only keep valid characters (removed comma - not valid in individual name parts)
     .replace(/\s+/g, ' ') // Normalize spaces
     .trim();
@@ -134,7 +137,12 @@ function isCompany(name) {
 }
 
 function titleCaseName(s) {
-  if (!s) return s;
+  if (!s) return null;
+
+  // Trim leading/trailing whitespace and remove leading/trailing delimiters
+  s = s.trim().replace(/^[\s\-',.]+|[\s\-',.]+$/g, '');
+  if (!s) return null;
+
   // Normalize consecutive delimiters (e.g., ". " or ", ") to single space
   // This ensures names like "St. James" become "St James" to match the pattern
   const normalized = s
@@ -148,10 +156,19 @@ function titleCaseName(s) {
     });
 
   // Capitalize first letter and any letter after a delimiter
-  return normalized
+  const result = normalized
     .replace(/(^|[\s\-'.])([a-z])/g, (match, delimiter, letter) => {
       return delimiter + letter.toUpperCase();
     });
+
+  // Validate the result matches the expected pattern
+  // Pattern: ^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$
+  const namePattern = /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/;
+  if (!result || !namePattern.test(result)) {
+    return null;
+  }
+
+  return result;
 }
 
 function parsePerson(name) {

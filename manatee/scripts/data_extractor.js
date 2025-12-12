@@ -2772,6 +2772,8 @@ function main() {
   let parcel = readJsonSafe("parcel.json");
   if (!parcel) {
     parcel = readJsonSafe("property_seed.json");
+  }
+  if (parcel && !parcel.parcel_identifier && parcel.parcel_id) {
     parcel.parcel_identifier = parcel.parcel_id;
   }
   const ownersData = readJsonSafe(path.join("owners", "owner_data.json"));
@@ -3026,7 +3028,7 @@ function main() {
         writeOut(`relationship_deed_file_${i}.json`, relDeedFile);
       }
       if (grantee && ownership_transfer_date) {
-        salesOwnerMapping[ownership_transfer_date] = grantee;
+        salesOwnerMapping[ownership_transfer_date] = { grantee: grantee, salesIndex: i };
       }
       i++;
     }
@@ -3221,8 +3223,8 @@ function main() {
         const usedPersonIdx = new Set();
         const usedCompanyIdx = new Set();
 
-        loopIdx = 1;
-        for (const [date, owner] of Object.entries(salesOwnerMapping)) {
+        for (const [date, mapping] of Object.entries(salesOwnerMapping)) {
+          const salesIdx = mapping.salesIndex;
           const ownersOnDate = ownersByDate[date] || [];
           ownersOnDate
             .filter((o) => o.type === "person")
@@ -3238,7 +3240,7 @@ function main() {
                   ),
                   {
                     to: { "/": `./person_${pIdx}.json` },
-                    from: { "/": `./sales_${loopIdx}.json` },
+                    from: { "/": `./sales_${salesIdx}.json` },
                   },
                 );
               }
@@ -3257,12 +3259,11 @@ function main() {
                   ),
                   {
                     to: { "/": `./company_${cIdx}.json` },
-                    from: { "/": `./sales_${loopIdx}.json` },
+                    from: { "/": `./sales_${salesIdx}.json` },
                   },
                 );
               }
             });
-          loopIdx++;
         };
         if (hasOwnerMailingAddress) {
           const currentOwner = ownersByDate["current"] || [];
