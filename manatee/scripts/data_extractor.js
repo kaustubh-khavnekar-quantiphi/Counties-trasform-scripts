@@ -2963,7 +2963,6 @@ function main() {
       };
       if (multi && salesReq) out.source_http_request = salesReq;
       if (purchase_price_amount !== 0 && !purchase_price_amount) {
-        i++;
         continue;
       }
       writeOut(`sales_${i}.json`, out);
