@@ -1227,7 +1227,7 @@ function findPersonIndexByName(first, last) {
 function findCompanyIndexByName(name) {
   const tn = (name || "").trim().toUpperCase();
   for (let i = 0; i < companies.length; i++) {
-    if ((companies[i].name || "").trim() === tn) return i + 1;
+    if ((companies[i].name || "").trim().toUpperCase() === tn) return i + 1;
   }
   return null;
 }
