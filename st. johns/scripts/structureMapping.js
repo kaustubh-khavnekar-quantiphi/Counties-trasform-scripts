@@ -177,8 +177,8 @@ function mapRoofStructureAndDesign(token) {
     "Steel Frame": ["Steel Truss", null],
     "Saw Tooth": [null, null],
     "Gambrel": [null, "Gambrel"],
-    "Reinforced Concrete": [null, "Concrete Beam"],
-    "Prestressed Concrete": [null, "Concrete Beam"],
+    "Reinforced Concrete": ["Concrete Beam", null],
+    "Prestressed Concrete": ["Concrete Beam", null],
     "Bow Trust": [null, null]
   }
   if (token in roofMapping) {
