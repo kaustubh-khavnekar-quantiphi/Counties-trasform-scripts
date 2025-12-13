@@ -2129,6 +2129,68 @@ function main() {
   }
 }
 
+/**
+ * Final cleanup function that removes any orphaned person/company files
+ * This runs at the very end to ensure no unreferenced files remain
+ */
+function finalCleanupOrphanedFiles() {
+  try {
+    const dataDir = "data";
+    if (!fs.existsSync(dataDir)) return;
+
+    const dataFiles = fs.readdirSync(dataDir);
+    const relationshipFiles = dataFiles.filter((f) => f.startsWith("relationship_") && f.endsWith(".json"));
+
+    // Build set of all referenced person and company files by scanning relationship files
+    const referencedFiles = new Set();
+    relationshipFiles.forEach((relFile) => {
+      try {
+        const relContent = fs.readFileSync(path.join(dataDir, relFile), "utf8");
+        const relData = JSON.parse(relContent);
+
+        // Check both 'from' and 'to' fields
+        if (relData.from && relData.from["/"]) {
+          const fromFile = relData.from["/"].replace("./", "");
+          if (fromFile.startsWith("person_") || fromFile.startsWith("company_")) {
+            referencedFiles.add(fromFile);
+          }
+        }
+        if (relData.to && relData.to["/"]) {
+          const toFile = relData.to["/"].replace("./", "");
+          if (toFile.startsWith("person_") || toFile.startsWith("company_")) {
+            referencedFiles.add(toFile);
+          }
+        }
+      } catch (e) {
+        // Ignore errors reading individual relationship files
+      }
+    });
+
+    // Remove any person/company files that are not referenced
+    let removedCount = 0;
+    dataFiles.forEach((f) => {
+      if ((f.startsWith("person_") || f.startsWith("company_")) && f.endsWith(".json")) {
+        if (!referencedFiles.has(f)) {
+          try {
+            fs.unlinkSync(path.join(dataDir, f));
+            removedCount++;
+            console.log(`Removed orphaned file: ${f}`);
+          } catch (e) {
+            // Ignore file deletion errors
+          }
+        }
+      }
+    });
+
+    if (removedCount > 0) {
+      console.log(`Final cleanup removed ${removedCount} orphaned person/company file(s)`);
+    }
+  } catch (e) {
+    // Ignore any errors during final cleanup
+    console.error("Error during final cleanup:", e.message);
+  }
+}
+
 if (require.main === module) {
   try {
     main();
@@ -2142,5 +2204,8 @@ if (require.main === module) {
       console.error("Unexpected error:", e);
       process.exit(1);
     }
+  } finally {
+    // Always run final cleanup, even if there were errors
+    finalCleanupOrphanedFiles();
   }
 }
