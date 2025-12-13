@@ -2972,13 +2972,13 @@ function main() {
       if (purchase_price_amount !== 0 && !purchase_price_amount) {
         continue;
       }
-      writeOut(`sales_${i}.json`, out);
-      // Create property->sales relationship
+      writeOut(`sales_history_${i}.json`, out);
+      // Create property->sales_history relationship
       const relPropertySales = {
         from: { "/": "./property.json" },
-        to: { "/": `./sales_${i}.json` },
+        to: { "/": `./sales_history_${i}.json` },
       };
-      writeOut(`relationship_property_sales_${i}.json`, relPropertySales);
+      writeOut(`relationship_property_has_sales_history_${i}.json`, relPropertySales);
       let book = bookIdx >= 0 ? row[bookIdx] || null : null;
       let page = pageIdx >= 0 ? row[pageIdx] || null : null;
       let instrType = instrTypeIdx >= 0 ? row[instrTypeIdx] || null : null;
@@ -2997,10 +2997,10 @@ function main() {
       }
       writeOut(`deed_${i}.json`, deed);
       const relSalesDeed = {
-        from: { "/": `./sales_${i}.json` },
+        from: { "/": `./sales_history_${i}.json` },
         to: { "/": `./deed_${i}.json` },
       };
-      writeOut(`relationship_sales_deed_${i}.json`, relSalesDeed);
+      writeOut(`relationship_sales_history_has_deed_${i}.json`, relSalesDeed);
       let link = null;
       if(instrNumber) {
         link = `https://records.manateeclerk.com/OfficialRecords/Search/InstrumentNumber?instrumentNumber=${instrNumber}`;
@@ -3249,11 +3249,11 @@ function main() {
                 writeJSON(
                   path.join(
                     "data",
-                    `relationship_sales_person_${relPersonCounter}.json`,
+                    `relationship_sales_history_has_person_${relPersonCounter}.json`,
                   ),
                   {
                     to: { "/": `./person_${pIdx}.json` },
-                    from: { "/": `./sales_${salesIdx}.json` },
+                    from: { "/": `./sales_history_${salesIdx}.json` },
                   },
                 );
               }
@@ -3268,11 +3268,11 @@ function main() {
                 writeJSON(
                   path.join(
                     "data",
-                    `relationship_sales_company_${relCompanyCounter}.json`,
+                    `relationship_sales_history_has_company_${relCompanyCounter}.json`,
                   ),
                   {
                     to: { "/": `./company_${cIdx}.json` },
-                    from: { "/": `./sales_${salesIdx}.json` },
+                    from: { "/": `./sales_history_${salesIdx}.json` },
                   },
                 );
               }
