@@ -2135,10 +2135,19 @@ function guessOwnerTypeFromRaw(raw) {
     " TR ",
     " HOA",
     " MORTGAGE",
+    "ADMIN",
+    "ADMINISTRATOR",
+    "V.A.",
+    "V A ",
   ];
   if (companyIndicators.some((indicator) => cleaned.includes(indicator)))
     return "company";
   if (/\d/.test(cleaned)) return "company";
+
+  // Check for multiple abbreviations (e.g., "V.A." or "U.S.A.")
+  // Pattern: single letters followed by periods
+  if (/\b[A-Z]\.[A-Z]\.?/.test(cleaned)) return "company";
+
   return "person";
 }
 
