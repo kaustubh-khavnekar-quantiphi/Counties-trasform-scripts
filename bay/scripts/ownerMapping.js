@@ -525,13 +525,27 @@ function classifyOwner(part, candidateLastNames) {
         }
       }
     }
+    // Apply title case formatting to person names
+    const formattedFirstName = titleCaseName(firstName);
+    const formattedLastName = titleCaseName(lastName);
+    const formattedMiddleName = middleNameValue ? titleCaseMiddleName(middleNameValue) : null;
+
+    // Validate that names pass the validation pattern
+    if (!formattedFirstName || !formattedLastName) {
+      return {
+        valid: false,
+        reason: "name_formatting_failed",
+        raw: cleaned,
+      };
+    }
+
     return {
       valid: true,
       owner: {
         type: "person",
-        first_name: firstName,
-        last_name: lastName,
-        middle_name: middleNameValue ? middleNameValue : null,
+        first_name: formattedFirstName,
+        last_name: formattedLastName,
+        middle_name: formattedMiddleName,
       },
     };
   }
@@ -559,12 +573,24 @@ function classifyOwner(part, candidateLastNames) {
       lastNameCandidate = pickFallbackLastName(fallbackLastNames);
     }
     if (lastNameCandidate) {
+      // Apply title case formatting
+      const formattedFirstName = titleCaseName(firstName);
+      const formattedLastName = titleCaseName(lastNameCandidate);
+
+      if (!formattedFirstName || !formattedLastName) {
+        return {
+          valid: false,
+          reason: "name_formatting_failed",
+          raw: cleaned,
+        };
+      }
+
       return {
         valid: true,
         owner: {
           type: "person",
-          first_name: firstName,
-          last_name: lastNameCandidate,
+          first_name: formattedFirstName,
+          last_name: formattedLastName,
           middle_name: null,
         },
       };
@@ -663,15 +689,111 @@ function classifyOwner(part, candidateLastNames) {
     }
   }
 
+  // Apply title case formatting to person names
+  const formattedFirstName = titleCaseName(firstName);
+  const formattedLastName = titleCaseName(lastName);
+  const formattedMiddleName = middleNameValue ? titleCaseMiddleName(middleNameValue) : null;
+
+  // Validate that names pass the validation pattern
+  if (!formattedFirstName || !formattedLastName) {
+    return {
+      valid: false,
+      reason: "name_formatting_failed",
+      raw: cleaned,
+    };
+  }
+
   return {
     valid: true,
     owner: {
       type: "person",
-      first_name: firstName,
-      last_name: lastName,
-      middle_name: middleNameValue ? middleNameValue : null,
+      first_name: formattedFirstName,
+      last_name: formattedLastName,
+      middle_name: formattedMiddleName,
     },
   };
+}
+
+function titleCaseName(s) {
+  if (!s) return null;
+  const trimmed = String(s).trim();
+  if (!trimmed) return null;
+
+  // Split by separators while preserving them
+  const parts = trimmed.toLowerCase().split(/([ \-',.])/);
+  let result = '';
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    // If it's a separator, just add it
+    if (/^[ \-',.]$/.test(part)) {
+      result += part;
+      continue;
+    }
+
+    // If it's a word, capitalize first letter
+    if (part.length > 0) {
+      result += part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }
+  }
+
+  if (!result || result.length === 0) return null;
+
+  // Normalize multiple consecutive separators (e.g., " -" → "-")
+  result = result.replace(/([ \-',.])(?=[ \-',.])/g, '');
+
+  // Remove trailing separators (e.g., "Flynn-" → "Flynn", "H." → "H")
+  while (/[ \-',.]$/.test(result)) {
+    result = result.slice(0, -1);
+  }
+
+  // Remove leading separators (edge case safety)
+  while (/^[ \-',.]/.test(result)) {
+    result = result.slice(1);
+  }
+
+  if (!result || result.length === 0) return null;
+
+  // Validate against the required pattern
+  if (!/^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/.test(result)) return null;
+
+  return result;
+}
+
+function titleCaseMiddleName(s) {
+  if (!s) return null;
+  const trimmed = String(s).trim();
+  if (!trimmed) return null;
+
+  // Split by separators while preserving them
+  const parts = trimmed.split(/([ \-',.])/);
+  let result = '';
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    // If it's a separator, just add it
+    if (/^[ \-',.]$/.test(part)) {
+      result += part;
+      continue;
+    }
+
+    // For middle names, capitalize first letter but preserve case for rest
+    if (part.length > 0) {
+      const lower = part.toLowerCase();
+      result += lower.charAt(0).toUpperCase() + lower.slice(1);
+    }
+  }
+
+  if (!result || result.length === 0) return null;
+
+  // Validate against the middle name pattern: ^[A-Z][a-zA-Z\s\-',.]*$
+  if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
+
+  return result;
 }
 
 function dedupeOwners(owners) {
