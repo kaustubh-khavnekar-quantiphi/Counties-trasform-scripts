@@ -1598,7 +1598,7 @@ function writeSalesDeedsFilesAndRelationships($, propertySeed) {
     const idx = i + 1;
     const saleObj = {
       ownership_transfer_date: parseDateToISO(s.saleDate),
-      purchase_price_amount: parseCurrencyToNumber(s.salePrice) !== null ? Math.abs(parseCurrencyToNumber(s.salePrice)) : null,
+      purchase_price_amount: parseCurrencyToNumber(s.salePrice),
       request_identifier: requestIdentifier,
     };
     if (sourceHttpRequest) {
