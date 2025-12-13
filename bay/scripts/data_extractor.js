@@ -2324,18 +2324,12 @@ function titleCaseName(s) {
   if (!s) return null;
   const trimmed = String(s).trim();
   if (!trimmed) return null;
-
-  // Convert to lowercase first
-  let result = trimmed.toLowerCase();
-
-  // Capitalize first letter
-  result = result.charAt(0).toUpperCase() + result.slice(1);
-
-  // Capitalize letters after special characters: space, hyphen, apostrophe, comma, period
-  result = result.replace(/([ \-',.])([a-z])/g, (match, separator, letter) => {
-    return separator + letter.toUpperCase();
-  });
-
+  const result = trimmed
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
   if (!result || result.length === 0) return null;
   if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
   return result;
