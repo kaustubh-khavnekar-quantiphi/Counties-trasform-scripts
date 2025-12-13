@@ -2375,6 +2375,10 @@ function titleCaseName(s) {
 
   if (!result || result.length === 0) return null;
 
+  // Normalize multiple consecutive separators (e.g., " -" → "-")
+  // This handles cases like "Flynn -J" which should become "Flynn-J"
+  result = result.replace(/([ \-',.])(?=[ \-',.])/g, '');
+
   // Validate against the required pattern
   if (!/^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/.test(result)) return null;
 
