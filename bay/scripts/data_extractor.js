@@ -1614,6 +1614,19 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
   let layoutCounter = 0;
 
   function writeLayoutFile(layoutData) {
+    // Validate space_type before writing
+    if (!layoutData || !layoutData.space_type) {
+      console.error(`ERROR: Attempting to write layout with null/missing space_type`);
+      return null;
+    }
+    const validatedSpaceType = validateSpaceType(layoutData.space_type);
+    if (!validatedSpaceType) {
+      console.error(`ERROR: Attempting to write layout with invalid space_type: "${layoutData.space_type}"`);
+      return null;
+    }
+    // Ensure the space_type is the validated version (trimmed, etc.)
+    layoutData.space_type = validatedSpaceType;
+
     layoutCounter += 1;
     const filename = `layout_${layoutCounter}.json`;
     writeJSON(path.join(dataDir, filename), layoutData);
@@ -1641,6 +1654,10 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
     buildingLayout.size_square_feet = totalArea;
     buildingLayout.is_finished = true;
     const buildingLayoutId = writeLayoutFile(buildingLayout);
+    if (!buildingLayoutId) {
+      console.error(`ERROR: Failed to write building layout for building ${buildingNumber}`);
+      return;
+    }
 
     buildingLayouts.push({
       layoutId: buildingLayoutId,
@@ -1672,16 +1689,18 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
         roomLayout.building_number = buildingNumber;
         roomLayout.is_finished = true;
         const childLayoutId = writeLayoutFile(roomLayout);
-        writeJSON(
-          path.join(
-            dataDir,
-            `relationship_layout_${buildingLayoutId}_has_layout_${childLayoutId}.json`,
-          ),
-          {
-            from: { "/": `./layout_${buildingLayoutId}.json` },
-            to: { "/": `./layout_${childLayoutId}.json` },
-          },
-        );
+        if (childLayoutId) {
+          writeJSON(
+            path.join(
+              dataDir,
+              `relationship_layout_${buildingLayoutId}_has_layout_${childLayoutId}.json`,
+            ),
+            {
+              from: { "/": `./layout_${buildingLayoutId}.json` },
+              to: { "/": `./layout_${childLayoutId}.json` },
+            },
+          );
+        }
       }
     });
 
@@ -1713,7 +1732,7 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
       featureLayout.livable_area_sq_ft = null;
       featureLayout.heated_area_sq_ft = null;
       const layoutId = writeLayoutFile(featureLayout);
-      if (buildingCountTotal === 1) {
+      if (layoutId && buildingCountTotal === 1) {
         writeJSON(
           path.join(
             dataDir,
