@@ -2153,14 +2153,14 @@ function writePersonCompaniesSalesRelationships(
           owner.middle_name || null,
           owner.suffix_name || null,
         );
-        if (pIdx)
+        if (pIdx && linkedPersonIds.has(pIdx))
           writeRelationship(
             `person_${pIdx}.json`,
             path.basename(mailingPath),
           );
       } else if (owner.type === "company") {
         const cIdx = findCompanyIndexByName(owner.name);
-        if (cIdx)
+        if (cIdx && linkedCompanyIds.has(cIdx))
           writeRelationship(
             `company_${cIdx}.json`,
             path.basename(mailingPath),
