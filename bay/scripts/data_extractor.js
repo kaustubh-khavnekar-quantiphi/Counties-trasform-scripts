@@ -1977,6 +1977,7 @@ function splitOwnerRawNames(raw) {
   const replaced = cleaned
     .replace(/\s+\/\s+/g, "|")
     .replace(/\s+&\s+/g, "|")
+    .replace(/&/g, "|")
     .replace(/,\s+AND\s+/gi, "|")
     .replace(/\s+AND\s+/gi, "|");
   return replaced
