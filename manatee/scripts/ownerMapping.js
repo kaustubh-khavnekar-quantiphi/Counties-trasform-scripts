@@ -174,22 +174,6 @@ function titleCaseName(s) {
 function parsePerson(name) {
   let v = norm(name);
   if (!v) return null;
-  // If contains '&', parse each part separately and return the first valid person
-  if (v.includes("&")) {
-    const parts = v
-      .split("&")
-      .map((s) => norm(s))
-      .filter(Boolean);
-    // Try to parse the first part recursively (without &)
-    if (parts.length >= 1) {
-      const firstPart = parts[0];
-      // Recursively parse the first part (it might have comma-separated format)
-      const parsed = parsePerson(firstPart);
-      if (parsed) {
-        return parsed;
-      }
-    }
-  }
   // Handle comma separated Last, First Middle
   if (v.includes(",")) {
     const segs = v
@@ -291,9 +275,9 @@ function extractOwnersFromHTML($) {
 function splitPotentialMultiOwner(str) {
   const v = cleanOwnerCandidate(str);
   if (!v) return [];
-  // Split on semicolons or pipes when clearly separating entities, but keep '&' intact per special rule
+  // Split on semicolons, pipes, or ampersands to separate multiple entities
   const parts = v
-    .split(/[;\|]/)
+    .split(/[;\|&]/)
     .map((s) => norm(s))
     .filter(Boolean);
   return parts.length ? parts : [v];
