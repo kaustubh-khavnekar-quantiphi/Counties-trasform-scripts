@@ -54,32 +54,32 @@ const deedCodeMap = {
   VPD: "Vacation of Plat Deed",
   AOC: "Assignment of Contract",
   ROC: "Release of Contract",
-  LC: "Land Contract",
-  MTG: "Mortgage",
-  LIS: "Lis Pendens",
-  EASE: "Easement",
-  AGMT: "Agreement",
-  AFF: "Affidavit",
-  ORD: "Order",
-  CERT: "Certificate",
-  RES: "Resolution",
-  DECL: "Declaration",
-  COV: "Covenant",
-  SUB: "Subordination",
-  MOD: "Modification",
-  REL: "Release",
-  ASSG: "Assignment",
-  LEAS: "Lease",
-  TR: "Trust",
-  WILL: "Will",
-  PROB: "Probate",
-  JUDG: "Judgment",
-  LIEN: "Lien",
-  SAT: "Satisfaction",
-  PART: "Partition",
-  EXCH: "Exchange",
-  CONV: "Conveyance",
-  OTH: "Other",
+  LC: "Miscellaneous",
+  MTG: "Miscellaneous",
+  LIS: "Miscellaneous",
+  EASE: "Miscellaneous",
+  AGMT: "Miscellaneous",
+  AFF: "Miscellaneous",
+  ORD: "Miscellaneous",
+  CERT: "Miscellaneous",
+  RES: "Miscellaneous",
+  DECL: "Miscellaneous",
+  COV: "Miscellaneous",
+  SUB: "Miscellaneous",
+  MOD: "Miscellaneous",
+  REL: "Miscellaneous",
+  ASSG: "Miscellaneous",
+  LEAS: "Miscellaneous",
+  TR: "Miscellaneous",
+  WILL: "Miscellaneous",
+  PROB: "Miscellaneous",
+  JUDG: "Miscellaneous",
+  LIEN: "Miscellaneous",
+  SAT: "Miscellaneous",
+  PART: "Miscellaneous",
+  EXCH: "Miscellaneous",
+  CONV: "Miscellaneous",
+  OTH: "Miscellaneous",
 };
 
 const propertyTypeMapping = [
@@ -1662,9 +1662,9 @@ function extractSales($) {
 }
 
 function mapInstrumentToDeedType(instr) {
-  if (!instr) return null;
+  if (!instr) return "Miscellaneous";
   const key = instr.trim().toUpperCase();
-  return deedCodeMap[key] || null;
+  return deedCodeMap[key] || "Miscellaneous";
 }
 
 function extractValuation($) {
@@ -1776,9 +1776,10 @@ function writeSalesDeedsFilesAndRelationships(
 
     const deedFile = `deed_${idx}.json`;
     const deedType = mapInstrumentToDeedType(s.instrument);
-    const deed = {};
+    const deed = {
+      deed_type: deedType
+    };
     if (parcelId) deed.request_identifier = parcelId;
-    if (deedType) deed.deed_type = deedType;
     if (sourceHttp) deed.source_http_request = sourceHttp;
     const bookPageText = s.bookPage
       ? s.bookPage.split("\n")[0].trim()
