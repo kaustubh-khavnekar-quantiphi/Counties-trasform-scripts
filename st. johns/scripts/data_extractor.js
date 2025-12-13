@@ -1262,9 +1262,22 @@ function parseCurrencyToNumber(txt) {
   if (txt == null) return null;
   const s = String(txt).trim();
   if (s === "") return null;
-  const n = Number(s.replace(/[$,]/g, ""));
+
+  // Handle parentheses notation for negative numbers: ($195,000.00) -> -195000.00
+  let cleaned = s;
+  let isNegative = false;
+  if (/^\(.*\)$/.test(s)) {
+    isNegative = true;
+    cleaned = s.slice(1, -1).trim();
+  }
+
+  // Remove currency symbols and commas
+  cleaned = cleaned.replace(/[$,]/g, "");
+  const n = Number(cleaned);
   if (isNaN(n)) return null;
-  return Math.round(n * 100) / 100;
+
+  const value = isNegative ? -n : n;
+  return Math.round(value * 100) / 100;
 }
 
 function parseDateToISO(txt) {
@@ -1596,9 +1609,16 @@ function writeSalesDeedsFilesAndRelationships($, propertySeed) {
 
   sales.forEach((s, i) => {
     const idx = i + 1;
+    const purchasePrice = parseCurrencyToNumber(s.salePrice);
+
+    // Skip sales without valid purchase price (required field, cannot be null)
+    if (typeof purchasePrice !== 'number' || !Number.isFinite(purchasePrice)) {
+      return;
+    }
+
     const saleObj = {
       ownership_transfer_date: parseDateToISO(s.saleDate),
-      purchase_price_amount: parseCurrencyToNumber(s.salePrice),
+      purchase_price_amount: purchasePrice,
       request_identifier: requestIdentifier,
     };
     if (sourceHttpRequest) {
