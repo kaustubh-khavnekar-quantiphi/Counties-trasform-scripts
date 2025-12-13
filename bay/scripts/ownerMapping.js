@@ -790,6 +790,21 @@ function titleCaseMiddleName(s) {
 
   if (!result || result.length === 0) return null;
 
+  // Remove leading separators
+  while (/^[ \-',.]/.test(result)) {
+    result = result.slice(1);
+  }
+
+  // Remove trailing separators
+  while (/[ \-',.]$/.test(result)) {
+    result = result.slice(0, -1);
+  }
+
+  // Normalize multiple consecutive separators (e.g., "John  Doe" → "John Doe")
+  result = result.replace(/([ \-',.])(?=[ \-',.])/g, '');
+
+  if (!result || result.length === 0) return null;
+
   // Validate against the middle name pattern: ^[A-Z][a-zA-Z\s\-',.]*$
   if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
 
