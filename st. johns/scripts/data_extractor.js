@@ -2285,6 +2285,23 @@ function attemptWriteAddress(unnorm, secTwpRng, siteAddress, mailingAddress, pro
 
 function main() {
   ensureDir("data");
+
+  // Clean up any person/company files and their relationships from previous runs since they're not part of Sales_History data group
+  try {
+    if (fs.existsSync("data")) {
+      fs.readdirSync("data").forEach((f) => {
+        if (/^person_\d+\.json$/.test(f) || /^company_\d+\.json$/.test(f) || /relationship.*_(person|company)_/.test(f)) {
+          const filePath = path.join("data", f);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+
   const $ = loadHTML();
 
   const propertySeed = readJSON("property_seed.json");
