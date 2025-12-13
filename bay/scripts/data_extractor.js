@@ -1492,26 +1492,66 @@ function normalizeNumber(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+const VALID_SPACE_TYPES = new Set([
+  "Building", "Living Room", "Family Room", "Great Room", "Dining Room", "Office Room",
+  "Conference Room", "Class Room", "Plant Floor", "Kitchen", "Breakfast Nook", "Pantry",
+  "Primary Bedroom", "Secondary Bedroom", "Guest Bedroom", "Children's Bedroom", "Nursery",
+  "Full Bathroom", "Three-Quarter Bathroom", "Half Bathroom / Powder Room", "En-Suite Bathroom",
+  "Jack-and-Jill Bathroom", "Primary Bathroom", "Laundry Room", "Mudroom", "Closet", "Bedroom",
+  "Walk-in Closet", "Mechanical Room", "Storage Room", "Server/IT Closet", "Home Office",
+  "Library", "Den", "Study", "Media Room / Home Theater", "Game Room", "Home Gym", "Music Room",
+  "Craft Room / Hobby Room", "Prayer Room / Meditation Room", "Safe Room / Panic Room",
+  "Wine Cellar", "Bar Area", "Greenhouse", "Attached Garage", "Detached Garage", "Carport",
+  "Workshop", "Storage Loft", "Porch", "Screened Porch", "Sunroom", "Deck", "Patio", "Pergola",
+  "Balcony", "Terrace", "Gazebo", "Pool House", "Outdoor Kitchen", "Lobby / Entry Hall",
+  "Common Room", "Utility Closet", "Elevator Lobby", "Mail Room", "Janitor's Closet", "Pool Area",
+  "Indoor Pool", "Outdoor Pool", "Hot Tub / Spa Area", "Shed", "Lanai", "Open Porch",
+  "Enclosed Porch", "Attic", "Enclosed Cabana", "Attached Carport", "Detached Carport",
+  "Detached Utility Closet", "Jacuzzi", "Courtyard", "Open Courtyard", "Screen Porch (1-Story)",
+  "Screen Enclosure (2-Story)", "Screen Enclosure (3-Story)", "Screen Enclosure (Custom)",
+  "Lower Garage", "Lower Screened Porch", "Stoop", "First Floor", "Second Floor", "Third Floor",
+  "Fourth Floor", "Floor", "Basement", "Sub-Basement", "Living Area", "Barn"
+]);
+
+function validateSpaceType(spaceType) {
+  if (!spaceType || typeof spaceType !== "string") return null;
+  const trimmed = spaceType.trim();
+  if (!trimmed || !VALID_SPACE_TYPES.has(trimmed)) return null;
+  return trimmed;
+}
+
 function mapExtraFeatureToSpaceType(feature) {
   const code = (feature && feature.code) ? String(feature.code).trim() : "";
   const descRaw = feature && feature.description ? feature.description : "";
   const desc = descRaw.toUpperCase();
 
+  let spaceType = null;
+
   if (desc.includes("POOL") || code === "0280") {
-    if (desc.includes("SPA")) return "Hot Tub / Spa Area";
-    return "Outdoor Pool";
-  }
-  if (desc.includes("PATIO")) return "Patio";
-  if (desc.includes("PORCH")) {
-    if (desc.includes("SCREEN")) return "Screened Porch";
-    if (desc.includes("OPEN")) return "Open Porch";
-    if (desc.includes("ENCLOSED")) return "Enclosed Porch";
-    return "Porch";
-  }
-  if (desc.includes("DECK")) return "Deck";
-  if (desc.includes("CARPORT")) return "Carport";
-  if (desc.includes("GARAGE")) return "Attached Garage";
-  if (
+    if (desc.includes("SPA")) {
+      spaceType = "Hot Tub / Spa Area";
+    } else {
+      spaceType = "Outdoor Pool";
+    }
+  } else if (desc.includes("PATIO")) {
+    spaceType = "Patio";
+  } else if (desc.includes("PORCH")) {
+    if (desc.includes("SCREEN")) {
+      spaceType = "Screened Porch";
+    } else if (desc.includes("OPEN")) {
+      spaceType = "Open Porch";
+    } else if (desc.includes("ENCLOSED")) {
+      spaceType = "Enclosed Porch";
+    } else {
+      spaceType = "Porch";
+    }
+  } else if (desc.includes("DECK")) {
+    spaceType = "Deck";
+  } else if (desc.includes("CARPORT")) {
+    spaceType = "Carport";
+  } else if (desc.includes("GARAGE")) {
+    spaceType = "Attached Garage";
+  } else if (
     desc.includes("STORAGE") ||
     desc.includes("UTILITY") ||
     desc.includes("UDU") ||
@@ -1519,12 +1559,16 @@ function mapExtraFeatureToSpaceType(feature) {
     desc.includes("UDG") ||
     desc.includes("UDS")
   ) {
-    return "Storage Room";
+    spaceType = "Storage Room";
+  } else if (desc.includes("CABANA")) {
+    spaceType = "Enclosed Cabana";
+  } else if (desc.includes("OFFICE")) {
+    spaceType = "Office Room";
+  } else if (desc.includes("BALCONY")) {
+    spaceType = "Balcony";
   }
-  if (desc.includes("CABANA")) return "Enclosed Cabana";
-  if (desc.includes("OFFICE")) return "Office Room";
-  if (desc.includes("BALCONY")) return "Balcony";
-  return null;
+
+  return validateSpaceType(spaceType);
 }
 
 function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRecord, propertyMapping, parcelId) {
@@ -1587,7 +1631,7 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
         : building.heated_area_sq_ft,
     );
     const buildingLayout = createLayoutBase();
-    buildingLayout.space_type = "Building";
+    buildingLayout.space_type = validateSpaceType("Building");
     buildingLayout.space_type_index = `${buildingIdx}`;
     buildingLayout.building_number = buildingNumber;
     buildingLayout.total_area_sq_ft = totalArea;
@@ -1617,12 +1661,14 @@ function writeLayoutsUtilitiesStructures(layoutEntry, utilityRecord, structureRe
 
     rooms.forEach((room) => {
       if (!room || !room.type) return;
+      const validatedType = validateSpaceType(room.type);
+      if (!validatedType) return;
       const count = Number(room.count) || 0;
       if (count <= 0) return;
       for (let i = 0; i < count; i += 1) {
         const roomLayout = createLayoutBase();
-        roomLayout.space_type = room.type;
-        roomLayout.space_type_index = nextIndexForType(room.type);
+        roomLayout.space_type = validatedType;
+        roomLayout.space_type_index = nextIndexForType(validatedType);
         roomLayout.building_number = buildingNumber;
         roomLayout.is_finished = true;
         const childLayoutId = writeLayoutFile(roomLayout);
