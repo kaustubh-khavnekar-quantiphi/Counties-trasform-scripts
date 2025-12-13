@@ -43,7 +43,7 @@ const deedCodeMap = {
   "GIFT DEED": "Gift Deed",
   ITD: "Interspousal Transfer Deed",
   "WILD D": "Wild Deed",
-  SMD: "Special Master\u2019s Deed",
+  SMD: "Special Master's Deed",
   COD: "Court Order Deed",
   CFD: "Contract for Deed",
   QTD: "Quiet Title Deed",
