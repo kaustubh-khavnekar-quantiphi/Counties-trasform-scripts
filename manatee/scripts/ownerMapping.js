@@ -143,17 +143,17 @@ function titleCaseName(s) {
   s = s.trim().replace(/^[\s\-',.]+|[\s\-',.]+$/g, '');
   if (!s) return null;
 
-  // Normalize consecutive delimiters (e.g., ". " or ", ") to single space
-  // This ensures names like "St. James" become "St James" to match the pattern
+  // Normalize the string:
+  // 1. Remove spaces adjacent to hyphens, apostrophes, periods (e.g., "- " → "-", " -" → "-")
+  // 2. Collapse multiple spaces to single space
+  // 3. Replace commas with spaces (commas separate name parts)
   const normalized = s
     .toLowerCase()
-    .replace(/[\s\-',.]+/g, (match) => {
-      // If multiple delimiters, collapse to single space
-      if (match.length > 1 || match === ',') {
-        return ' ';
-      }
-      return match;
-    });
+    .replace(/,/g, ' ') // Replace commas with spaces
+    .replace(/\s*([-'])\s*/g, '$1') // Remove spaces around hyphens and apostrophes
+    .replace(/\.\s+/g, ' ') // Replace period+space with space (e.g., "St. James" → "St James")
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim();
 
   // Capitalize first letter and any letter after a delimiter
   const result = normalized
