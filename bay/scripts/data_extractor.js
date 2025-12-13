@@ -2173,7 +2173,7 @@ function createPersonFromRaw(raw, parcelId) {
     const first = restParts[0] ? titleCaseName(restParts[0]) : null;
     let middle = null;
     if (restParts.length > 1) {
-      middle = titleCaseName(restParts.slice(1).join(" "));
+      middle = titleCaseMiddleName(restParts.slice(1).join(" "));
     }
     return {
       first_name: first,
@@ -2201,7 +2201,7 @@ function createPersonFromRaw(raw, parcelId) {
   }
   const first = titleCaseName(parts[1]);
   const last = titleCaseName(parts[0]);
-  const middle = titleCaseName(parts.slice(2).join(" "));
+  const middle = titleCaseMiddleName(parts.slice(2).join(" "));
   return {
     first_name: first,
     middle_name: middle || null,
@@ -2376,6 +2376,41 @@ function titleCaseName(s) {
   return result;
 }
 
+function titleCaseMiddleName(s) {
+  if (!s) return null;
+  const trimmed = String(s).trim();
+  if (!trimmed) return null;
+
+  // Split by separators while preserving them
+  const parts = trimmed.split(/([ \-',.])/);
+  let result = '';
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    // If it's a separator, just add it
+    if (/^[ \-',.]$/.test(part)) {
+      result += part;
+      continue;
+    }
+
+    // For middle names, capitalize first letter but preserve case for rest
+    // This allows initials like "J.R." to work
+    if (part.length > 0) {
+      const lower = part.toLowerCase();
+      result += lower.charAt(0).toUpperCase() + lower.slice(1);
+    }
+  }
+
+  if (!result || result.length === 0) return null;
+
+  // Validate against the middle name pattern: ^[A-Z][a-zA-Z\s\-',.]*$
+  if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
+
+  return result;
+}
+
 function writePersonCompaniesSalesRelationships(
   parcelId,
   sales,
@@ -2434,7 +2469,7 @@ function writePersonCompaniesSalesRelationships(
   people = Array.from(personMap.values())
     .map((p) => ({
       first_name: p.first_name ? titleCaseName(p.first_name) : null,
-      middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
+      middle_name: p.middle_name ? titleCaseMiddleName(p.middle_name) : null,
       last_name: p.last_name ? titleCaseName(p.last_name) : null,
       birth_date: null,
       prefix_name: null,
