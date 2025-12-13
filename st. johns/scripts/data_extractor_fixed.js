@@ -1764,6 +1764,8 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
   // people.forEach((p, idx) => {
   //   writeJSON(path.join("data", `person_${idx + 1}.json`), p);
   // });
+  people = []; // Empty array to avoid errors in downstream code
+
   // NOTE: Company generation disabled - company class is not part of Sales_History data group
   // const companyNames = new Set();
   // Object.values(ownersByDate).forEach((arr) => {
@@ -2148,20 +2150,21 @@ function attemptWriteAddress(unnorm, secTwpRng, siteAddress, mailingAddress, pro
   const requestIdentifier = (propertySeed && (propertySeed.request_identifier || propertySeed.parcel_id)) || null;
   const sourceHttpRequest = (propertySeed && propertySeed.source_http_request) || null;
 
+  // NOTE: Mailing address disabled - person class not in data group, so no relationships can reference it
   let hasOwnerMailingAddress = false;
-  if (mailingAddress) {
-    const mailingAddressObj = {
-      latitude: null,
-      longitude: null,
-      unnormalized_address: mailingAddress,
-      request_identifier: requestIdentifier,
-    };
-    if (sourceHttpRequest) {
-      mailingAddressObj.source_http_request = sourceHttpRequest;
-    }
-    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
-    hasOwnerMailingAddress = true;
-  }
+  // if (mailingAddress) {
+  //   const mailingAddressObj = {
+  //     latitude: null,
+  //     longitude: null,
+  //     unnormalized_address: mailingAddress,
+  //     request_identifier: requestIdentifier,
+  //   };
+  //   if (sourceHttpRequest) {
+  //     mailingAddressObj.source_http_request = sourceHttpRequest;
+  //   }
+  //   writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
+  //   hasOwnerMailingAddress = true;
+  // }
   if (siteAddress) {
     const addressObj = {
       latitude: unnorm && unnorm.latitude ? unnorm.latitude : null,
@@ -2267,6 +2270,23 @@ function attemptWriteAddress(unnorm, secTwpRng, siteAddress, mailingAddress, pro
 
 function main() {
   ensureDir("data");
+
+  // Clean up any person/company files and their relationships from previous runs since they're not part of Sales_History data group
+  try {
+    if (fs.existsSync("data")) {
+      fs.readdirSync("data").forEach((f) => {
+        if (/^person_\d+\.json$/.test(f) || /^company_\d+\.json$/.test(f) || /^mailing_address\.json$/.test(f) || /relationship.*_(person|company)_/.test(f)) {
+          const filePath = path.join("data", f);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+
   const $ = loadHTML();
 
   const propertySeed = readJSON("property_seed.json");
