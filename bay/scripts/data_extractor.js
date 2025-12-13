@@ -2188,10 +2188,19 @@ function createPersonFromRaw(raw, parcelId) {
     if (parts.length === 0) return { parts, suffix: null };
     const lastPart = parts[parts.length - 1].toUpperCase().replace(/\./g, '');
     const suffixes = ['JR', 'SR', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    // Also filter out common Latin abbreviations that are not part of names
+    const latinAbbreviations = ['ET', 'UX', 'UXOR', 'ETUX', 'ETAL', 'AL'];
     if (suffixes.includes(lastPart)) {
       return {
         parts: parts.slice(0, -1),
         suffix: titleCaseName(lastPart) // Apply titleCaseName to format the suffix
+      };
+    }
+    // Remove Latin abbreviations but don't treat them as suffixes
+    if (latinAbbreviations.includes(lastPart)) {
+      return {
+        parts: parts.slice(0, -1),
+        suffix: null
       };
     }
     return { parts, suffix: null };
