@@ -162,6 +162,20 @@ function mapRoofCover(token) {
   return null;
 }
 
+function validateRoofDesignType(value) {
+  // Valid enum values according to Elephant schema for roof_design_type
+  const validValues = [
+    "Gable", "Hip", "Flat", "Mansard", "Gambrel", "Shed", "Saltbox",
+    "Butterfly", "Bonnet", "Clerestory", "Dome", "Barrel", "Combination"
+  ];
+
+  // If value is null, undefined, empty string, or not in valid values, return null
+  if (!value || typeof value !== 'string' || !validValues.includes(value)) {
+    return null;
+  }
+  return value;
+}
+
 function mapRoofStructureAndDesign(token) {
   if (!token) {
     return [null, null];
@@ -179,7 +193,15 @@ function mapRoofStructureAndDesign(token) {
     "Gambrel": [null, "Gambrel"],
     "Reinforced Concrete": ["Concrete Beam", null],
     "Prestressed Concrete": ["Concrete Beam", null],
-    "Bow Trust": [null, null]
+    "Bow Trust": [null, null],
+    "Gable": [null, "Gable"],
+    "Hip": [null, "Hip"],
+    "Saltbox": [null, "Saltbox"],
+    "Butterfly": [null, "Butterfly"],
+    "Bonnet": [null, "Bonnet"],
+    "Clerestory": [null, "Clerestory"],
+    "Dome": [null, "Dome"],
+    "Barrel": [null, "Barrel"]
   }
   if (token in roofMapping) {
     return roofMapping[token];
@@ -349,7 +371,7 @@ function buildStructureRecord($, buildings) {
       roof_condition: null,
       roof_covering_material: roof_covering_material,
       roof_date: null,
-      roof_design_type: roof_structure_design[1],
+      roof_design_type: validateRoofDesignType(roof_structure_design[1]),
       roof_material_type: null,
       roof_structure_material: roof_structure_design[0],
       roof_underlayment_type: null,
