@@ -2173,9 +2173,60 @@ function main() {
     });
   }
 
-  // Note: Persons and companies are not part of the Sales_History data group,
-  // so they should not be written. Mailing address is also not written since
-  // there are no entities in this data group that can reference it.
+  // Build persons and companies from owner data
+  const pc = buildPersonsAndCompanies(ownerJSON, parcelId);
+
+  // Write person files
+  pc.persons.forEach((p, idx) => {
+    writeJSON(path.join("data", `person_${idx + 1}.json`), p);
+  });
+
+  // Write company files
+  pc.companies.forEach((c, idx) => {
+    writeJSON(path.join("data", `company_${idx + 1}.json`), c);
+  });
+
+  // Create relationships from sales_history to persons based on date matching
+  if (sales && ownerJSON && ownerJSON[key] && ownerJSON[key].owners_by_date) {
+    const ownersByDate = ownerJSON[key].owners_by_date;
+
+    sales.forEach((s, saleIdx) => {
+      const saleDate = convertDateFormat(s.SaleDate);
+      const ownersOnDate = (saleDate && ownersByDate[saleDate]) || [];
+
+      // Link persons who owned the property on this sale date
+      ownersOnDate.forEach((owner) => {
+        if (owner.type === "person") {
+          // Find the person index
+          const firstName = toTitleCase(owner.first_name);
+          const middleName = owner.middle_name ? toTitleCase(owner.middle_name) : null;
+          const lastName = toTitleCase(owner.last_name);
+          const personKey = `${firstName}|${middleName || ""}|${lastName}`;
+
+          const personIdx = pc.personIndexByKey.get(personKey);
+          if (personIdx) {
+            const relFilename = `relationship_sales_person_${saleIdx + 1}_${personIdx}.json`;
+            writeJSON(path.join("data", relFilename), {
+              from: { "/": `./sales_${saleIdx + 1}.json` },
+              to: { "/": `./person_${personIdx}.json` },
+            });
+          }
+        } else if (owner.type === "company") {
+          // Find the company index
+          const companyName = (owner.name || "").trim();
+          const companyIdx = pc.companyIndexByName.get(companyName);
+          if (companyIdx) {
+            const relFilename = `relationship_sales_company_${saleIdx + 1}_${companyIdx}.json`;
+            writeJSON(path.join("data", relFilename), {
+              from: { "/": `./sales_${saleIdx + 1}.json` },
+              to: { "/": `./company_${companyIdx}.json` },
+            });
+          }
+        }
+      });
+    });
+  }
+
   // Layout extraction from owners/layout_data.json
   if (layoutData) {
     const lset =
