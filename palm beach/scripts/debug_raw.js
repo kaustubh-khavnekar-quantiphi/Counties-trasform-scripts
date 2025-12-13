@@ -5101,7 +5101,10 @@ async function main() {
 
           for (const owner of owners) {
             if (owner.type === "company") {
-              // Create company record
+              // Create company record only if sale file exists
+              if (!saleFileExists) {
+                continue;
+              }
               const company = {
                 name: toTitleCase(owner.name),
               };
@@ -5115,13 +5118,16 @@ async function main() {
 
               writeRelationshipFile(
                 path.join(dataDir, `relationship_sales_company_${relIdx}.json`),
-                saleFileExists ? saleFileRelative : null,
+                saleFileRelative,
                 companyFileRelative,
               );
               relIdx++;
               companyIdx++;
             } else {
-              // Create person record
+              // Create person record only if sale file exists
+              if (!saleFileExists) {
+                continue;
+              }
               const firstName = formatNamePart(owner.first_name);
               const lastName = formatNamePart(owner.last_name);
               if (!firstName || !lastName) {
@@ -5146,7 +5152,7 @@ async function main() {
 
               writeRelationshipFile(
                 path.join(dataDir, `relationship_sales_person_${relIdx}.json`),
-                saleFileExists ? saleFileRelative : null,
+                saleFileRelative,
                 personFileRelative,
               );
               relIdx++;
@@ -5168,7 +5174,10 @@ async function main() {
 
         for (const owner of owners) {
           if (owner.type === "company") {
-            // Create company record
+            // Create company record only if property file exists
+            if (!propertyFileExists) {
+              continue;
+            }
             const company = {
               name: toTitleCase(owner.name),
             };
@@ -5186,11 +5195,14 @@ async function main() {
                 `relationship_company_${companyIdx}_property.json`,
               ),
               companyFileRelative,
-              propertyFileExists ? propertyFileRelative : null,
+              propertyFileRelative,
             );
             companyIdx++;
           } else {
-            // Create person record
+            // Create person record only if property file exists
+            if (!propertyFileExists) {
+              continue;
+            }
             const firstName = formatNamePart(owner.first_name);
             const lastName = formatNamePart(owner.last_name);
             if (!firstName || !lastName) {
@@ -5219,7 +5231,7 @@ async function main() {
                 `relationship_person_${personIdx}_property.json`,
               ),
               personFileRelative,
-              propertyFileExists ? propertyFileRelative : null,
+              propertyFileRelative,
             );
             personIdx++;
           }
