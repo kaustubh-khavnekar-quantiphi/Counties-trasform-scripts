@@ -1218,8 +1218,11 @@ function findPersonIndexByName(first, last) {
   const tf = titleCaseName(first);
   const tl = titleCaseName(last);
   for (let i = 0; i < people.length; i++) {
-    if (people[i].first_name === tf && people[i].last_name === tl)
+    // Check both normal and reversed name order
+    if ((people[i].first_name === tf && people[i].last_name === tl) ||
+        (people[i].first_name === tl && people[i].last_name === tf)) {
       return i + 1;
+    }
   }
   return null;
 }
@@ -1286,14 +1289,19 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
     (arr || []).forEach((o) => {
       if (o.type === "person") {
         const k = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
-        if (!personMap.has(k))
+        // Also check for reversed key to avoid duplicates
+        const reversedK = `${(o.last_name || "").trim().toUpperCase()}|${(o.first_name || "").trim().toUpperCase()}`;
+
+        if (!personMap.has(k) && !personMap.has(reversedK)) {
           personMap.set(k, {
             first_name: o.first_name,
             middle_name: o.middle_name,
             last_name: o.last_name,
           });
-        else {
-          const existing = personMap.get(k);
+        } else {
+          // Use whichever key exists
+          const existingKey = personMap.has(k) ? k : reversedK;
+          const existing = personMap.get(existingKey);
           if (!existing.middle_name && o.middle_name)
             existing.middle_name = o.middle_name;
         }
