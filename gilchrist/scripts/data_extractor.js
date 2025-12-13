@@ -1280,36 +1280,34 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
   const companyNames = new Set();
 
   // Collect all persons and companies (excluding unknown_date entries)
-  Object.entries(ownersByDate).forEach(([dateKey, arr]) => {
-    // Skip unknown_date entries as these are grantors who never became grantees
-    if (dateKey.startsWith("unknown_date")) {
-      return;
-    }
+  // Only collect from entries that will have relationships created
+  Object.entries(ownersByDate)
+    .filter(([dateKey]) => !dateKey.startsWith("unknown_date"))
+    .forEach(([dateKey, arr]) => {
+      (arr || []).forEach((o) => {
+        if (o.type === "person") {
+          const k = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
+          // Also check for reversed key to avoid duplicates
+          const reversedK = `${(o.last_name || "").trim().toUpperCase()}|${(o.first_name || "").trim().toUpperCase()}`;
 
-    (arr || []).forEach((o) => {
-      if (o.type === "person") {
-        const k = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
-        // Also check for reversed key to avoid duplicates
-        const reversedK = `${(o.last_name || "").trim().toUpperCase()}|${(o.first_name || "").trim().toUpperCase()}`;
-
-        if (!personMap.has(k) && !personMap.has(reversedK)) {
-          personMap.set(k, {
-            first_name: o.first_name,
-            middle_name: o.middle_name,
-            last_name: o.last_name,
-          });
-        } else {
-          // Use whichever key exists
-          const existingKey = personMap.has(k) ? k : reversedK;
-          const existing = personMap.get(existingKey);
-          if (!existing.middle_name && o.middle_name)
-            existing.middle_name = o.middle_name;
+          if (!personMap.has(k) && !personMap.has(reversedK)) {
+            personMap.set(k, {
+              first_name: o.first_name,
+              middle_name: o.middle_name,
+              last_name: o.last_name,
+            });
+          } else {
+            // Use whichever key exists
+            const existingKey = personMap.has(k) ? k : reversedK;
+            const existing = personMap.get(existingKey);
+            if (!existing.middle_name && o.middle_name)
+              existing.middle_name = o.middle_name;
+          }
+        } else if (o.type === "company" && (o.name || "").trim()) {
+          companyNames.add((o.name || "").trim());
         }
-      } else if (o.type === "company" && (o.name || "").trim()) {
-        companyNames.add((o.name || "").trim().toUpperCase());
-      }
+      });
     });
-  });
 
   people = Array.from(personMap.values()).map((p) => ({
     first_name: p.first_name ? titleCaseName(p.first_name) : null,
