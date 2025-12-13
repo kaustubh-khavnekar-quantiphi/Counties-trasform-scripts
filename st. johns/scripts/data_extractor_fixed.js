@@ -2275,7 +2275,8 @@ function main() {
   try {
     if (fs.existsSync("data")) {
       fs.readdirSync("data").forEach((f) => {
-        if (/^person_\d+\.json$/.test(f) || /^company_\d+\.json$/.test(f) || /^mailing_address\.json$/.test(f) || /relationship.*_(person|company)_/.test(f)) {
+        // Fixed regex: also match relationship files with _person or _company followed by digits/underscores
+        if (/^person_\d+\.json$/.test(f) || /^company_\d+\.json$/.test(f) || /^mailing_address\.json$/.test(f) || /relationship.*_(person|company)/.test(f)) {
           const filePath = path.join("data", f);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
