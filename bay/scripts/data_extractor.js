@@ -2231,6 +2231,10 @@ function ensureOwnerRefFromRaw(raw, parcelId) {
   const ownerType = guessOwnerTypeFromRaw(raw);
   if (ownerType === "person") {
     const personObj = createPersonFromRaw(raw, parcelId);
+    // Validate that person has valid first_name and last_name before creating
+    if (!personObj.first_name || !personObj.last_name) {
+      return null;
+    }
     people.push(personObj);
     const idx = people.length;
     writeJSON(path.join("data", `person_${idx}.json`), personObj);
@@ -2366,17 +2370,19 @@ function writePersonCompaniesSalesRelationships(
       }
     });
   });
-  people = Array.from(personMap.values()).map((p) => ({
-    first_name: p.first_name ? titleCaseName(p.first_name) : null,
-    middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
-    last_name: p.last_name ? titleCaseName(p.last_name) : null,
-    birth_date: null,
-    prefix_name: null,
-    suffix_name: null,
-    us_citizenship_status: null,
-    veteran_status: null,
-    request_identifier: parcelId,
-  }));
+  people = Array.from(personMap.values())
+    .map((p) => ({
+      first_name: p.first_name ? titleCaseName(p.first_name) : null,
+      middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
+      last_name: p.last_name ? titleCaseName(p.last_name) : null,
+      birth_date: null,
+      prefix_name: null,
+      suffix_name: null,
+      us_citizenship_status: null,
+      veteran_status: null,
+      request_identifier: parcelId,
+    }))
+    .filter((p) => p.first_name && p.last_name);
   people.forEach((p, idx) => {
     writeJSON(path.join("data", `person_${idx + 1}.json`), p);
   });
