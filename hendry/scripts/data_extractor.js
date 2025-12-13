@@ -1210,7 +1210,9 @@ const NAME_PREFIX_MAP = new Map([
 
 const NAME_SUFFIX_MAP = new Map([
   ["jr", "Jr."],
+  ["junior", "Jr."],
   ["sr", "Sr."],
+  ["senior", "Sr."],
   ["ii", "II"],
   ["iii", "III"],
   ["iv", "IV"],
@@ -1267,6 +1269,13 @@ const SURNAME_PARTICLES = new Set([
 
 function normalizeTokenForLookup(token) {
   return (token || "").replace(/\./g, "").toLowerCase();
+}
+
+function normalizePersonSuffix(suffix) {
+  if (!suffix) return null;
+  const normalized = normalizeTokenForLookup(suffix);
+  const canonical = NAME_SUFFIX_MAP.get(normalized);
+  return canonical || null;
 }
 
 function aggregateParticles(tokens) {
@@ -1905,11 +1914,12 @@ function writePersonCompaniesSalesRelationships(
 
   const addPersonOwner = (owner) => {
     if (!owner || !owner.first_name || !owner.last_name) return;
+    const normalizedSuffix = normalizePersonSuffix(owner.suffix_name);
     const key = buildPersonKey(
       owner.first_name,
       owner.middle_name || null,
       owner.last_name,
-      owner.suffix_name || null,
+      normalizedSuffix,
     );
     const existing = personMap.get(key);
     if (existing) {
@@ -1917,8 +1927,8 @@ function writePersonCompaniesSalesRelationships(
         existing.middle_name = owner.middle_name;
       if (!existing.prefix_name && owner.prefix_name)
         existing.prefix_name = owner.prefix_name;
-      if (!existing.suffix_name && owner.suffix_name)
-        existing.suffix_name = owner.suffix_name;
+      if (!existing.suffix_name && normalizedSuffix)
+        existing.suffix_name = normalizedSuffix;
       if (
         (!existing.mailing_address || !existing.mailing_address.trim()) &&
         owner.mailing_address
@@ -1932,7 +1942,7 @@ function writePersonCompaniesSalesRelationships(
       middle_name: owner.middle_name || null,
       last_name: owner.last_name,
       prefix_name: owner.prefix_name || null,
-      suffix_name: owner.suffix_name || null,
+      suffix_name: normalizedSuffix,
       mailing_address: owner.mailing_address || null,
     });
   };
@@ -2069,7 +2079,7 @@ function writePersonCompaniesSalesRelationships(
           first_name: o.first_name,
           middle_name: o.middle_name || null,
           last_name: o.last_name,
-          suffix_name: o.suffix_name || null,
+          suffix_name: normalizePersonSuffix(o.suffix_name),
         });
       } else if (o.type === "company") {
         addRelationshipForOwner({ type: "company", name: o.name });
