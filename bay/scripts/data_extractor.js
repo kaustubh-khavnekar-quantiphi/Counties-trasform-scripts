@@ -2535,6 +2535,14 @@ function writePersonCompaniesSalesRelationships(
     record && record.owners_by_date && typeof record.owners_by_date === "object"
       ? record.owners_by_date
       : {};
+
+  // Remove records with keys starting with 'unknown_date_'
+  Object.keys(ownersByDate).forEach(key => {
+    if (key.startsWith('unknown_date_')) {
+      delete ownersByDate[key];
+    }
+  });
+
   const personMap = new Map();
   Object.values(ownersByDate).forEach((arr) => {
     (arr || []).forEach((o) => {
