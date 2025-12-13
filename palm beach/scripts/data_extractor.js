@@ -2113,8 +2113,9 @@ function main() {
     }
   });
 
-  // Sales
+  // Sales - create sales records with associated date info for later linking
   const sales = parsed?.salesInfo;
+  const salesRecords = [];
   if (sales) {
     // {
     //         "SaleDate": "05/04/2023",
@@ -2127,11 +2128,20 @@ function main() {
     //         "NoSalesInfo": null
     //     }
     sales.forEach((s, idx) => {
+      const ownershipDate = convertDateFormat(s.SaleDate) || null;
       const saleOut = {
-        ownership_transfer_date: convertDateFormat(s.SaleDate) || null,
+        ownership_transfer_date: ownershipDate,
         purchase_price_amount: parseNumber(s.Price) ?? null,
       };
       writeJSON(path.join("data", `sales_${idx + 1}.json`), saleOut);
+
+      // Track sales records for linking to owners
+      salesRecords.push({
+        index: idx + 1,
+        date: ownershipDate,
+        filePath: `./sales_${idx + 1}.json`
+      });
+
       let deed = { deed_type: mapInstrumentToDeedType(s.SaleType) };
       let link = null;
       if (s.Book && s.Page && s.Book.trim() && s.Page.trim()) {
@@ -2173,9 +2183,150 @@ function main() {
     });
   }
 
-  // Note: Persons and companies are not part of the Sales_History data group,
-  // so they should not be written. Mailing address is also not written since
-  // there are no entities in this data group that can reference it.
+  // Create person and company files and link them to sales
+  // Only include owners that have a matching sales date (exclude "current" owners)
+  if (ownerJSON && parcelId) {
+    const ownerKey = `property_${parcelId}`;
+    const ownerRecord = ownerJSON[ownerKey];
+
+    if (ownerRecord && ownerRecord.owners_by_date) {
+      const ownersByDate = ownerRecord.owners_by_date;
+
+      // Get the set of sales dates to filter owners
+      const salesDates = new Set(salesRecords.map(sr => sr.date).filter(Boolean));
+
+      // Build unique person map (deduplicate by first+last name)
+      // Only include owners from dates that match sales dates
+      const personMap = new Map();
+      Object.entries(ownersByDate).forEach(([date, ownersList]) => {
+        // Skip "current" and any dates that don't have a matching sale
+        if (date === "current" || !salesDates.has(date)) return;
+
+        (ownersList || []).forEach((o) => {
+          if (o.type === "person") {
+            const key = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
+            if (!personMap.has(key)) {
+              personMap.set(key, {
+                first_name: o.first_name,
+                middle_name: o.middle_name,
+                last_name: o.last_name,
+              });
+            } else {
+              // Merge middle name if missing
+              const existing = personMap.get(key);
+              if (!existing.middle_name && o.middle_name) {
+                existing.middle_name = o.middle_name;
+              }
+            }
+          }
+        });
+      });
+
+      // Write person files
+      const persons = Array.from(personMap.values()).map((p) => ({
+        birth_date: null,
+        first_name: p.first_name ? toTitleCase(p.first_name) : null,
+        last_name: p.last_name ? toTitleCase(p.last_name) : null,
+        middle_name: p.middle_name ? toTitleCase(p.middle_name) : null,
+        prefix_name: null,
+        suffix_name: null,
+        us_citizenship_status: null,
+        veteran_status: null,
+      }));
+
+      persons.forEach((p, idx) => {
+        writeJSON(path.join("data", `person_${idx + 1}.json`), p);
+      });
+
+      // Build unique company set
+      // Only include companies from dates that match sales dates
+      const companyNames = new Set();
+      Object.entries(ownersByDate).forEach(([date, ownersList]) => {
+        // Skip "current" and any dates that don't have a matching sale
+        if (date === "current" || !salesDates.has(date)) return;
+
+        (ownersList || []).forEach((o) => {
+          if (o.type === "company" && (o.name || "").trim()) {
+            companyNames.add((o.name || "").trim());
+          }
+        });
+      });
+
+      // Write company files
+      const companies = Array.from(companyNames).map((name) => ({ name }));
+      companies.forEach((c, idx) => {
+        writeJSON(path.join("data", `company_${idx + 1}.json`), c);
+      });
+
+      // Helper function to find person index by name
+      function findPersonIndex(firstName, lastName) {
+        const searchKey = `${(firstName || "").trim().toUpperCase()}|${(lastName || "").trim().toUpperCase()}`;
+        let idx = 0;
+        for (const [key] of personMap) {
+          idx++;
+          if (key === searchKey) return idx;
+        }
+        return null;
+      }
+
+      // Helper function to find company index by name
+      function findCompanyIndex(name) {
+        const normalized = (name || "").trim();
+        let idx = 0;
+        for (const companyName of companyNames) {
+          idx++;
+          if (companyName === normalized) return idx;
+        }
+        return null;
+      }
+
+      // Create relationships between sales and persons/companies based on date matching
+      salesRecords.forEach((saleRec) => {
+        const ownersOnDate = ownersByDate[saleRec.date] || [];
+        const linkedEntities = new Set(); // Track to avoid duplicates
+
+        // Link persons
+        ownersOnDate
+          .filter((o) => o.type === "person")
+          .forEach((o) => {
+            const pIdx = findPersonIndex(o.first_name, o.last_name);
+            if (pIdx) {
+              const entityKey = `person:${pIdx}`;
+              if (!linkedEntities.has(entityKey)) {
+                linkedEntities.add(entityKey);
+                writeJSON(
+                  path.join("data", `relationship_sales_${saleRec.index}_has_person_${pIdx}.json`),
+                  {
+                    from: { "/": saleRec.filePath },
+                    to: { "/": `./person_${pIdx}.json` },
+                  }
+                );
+              }
+            }
+          });
+
+        // Link companies
+        ownersOnDate
+          .filter((o) => o.type === "company")
+          .forEach((o) => {
+            const cIdx = findCompanyIndex(o.name);
+            if (cIdx) {
+              const entityKey = `company:${cIdx}`;
+              if (!linkedEntities.has(entityKey)) {
+                linkedEntities.add(entityKey);
+                writeJSON(
+                  path.join("data", `relationship_sales_${saleRec.index}_has_company_${cIdx}.json`),
+                  {
+                    from: { "/": saleRec.filePath },
+                    to: { "/": `./company_${cIdx}.json` },
+                  }
+                );
+              }
+            }
+          });
+      });
+    }
+  }
   // Layout extraction from owners/layout_data.json
   if (layoutData) {
     const lset =
