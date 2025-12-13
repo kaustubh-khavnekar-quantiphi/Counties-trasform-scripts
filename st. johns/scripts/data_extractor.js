@@ -1262,9 +1262,22 @@ function parseCurrencyToNumber(txt) {
   if (txt == null) return null;
   const s = String(txt).trim();
   if (s === "") return null;
-  const n = Number(s.replace(/[$,]/g, ""));
+
+  // Handle parentheses notation for negative numbers: ($123.45) -> -123.45
+  let isNegative = false;
+  let cleanedStr = s;
+  if (/^\(.*\)$/.test(s)) {
+    isNegative = true;
+    cleanedStr = s.slice(1, -1).trim();
+  }
+
+  // Remove $ and , characters
+  cleanedStr = cleanedStr.replace(/[$,]/g, "");
+  const n = Number(cleanedStr);
   if (isNaN(n)) return null;
-  return Math.round(n * 100) / 100;
+
+  const result = isNegative ? -n : n;
+  return Math.round(result * 100) / 100;
 }
 
 function parseDateToISO(txt) {
@@ -1582,7 +1595,7 @@ function writeSalesDeedsFilesAndRelationships($, propertySeed) {
   try {
     if (fs.existsSync("data")) {
       fs.readdirSync("data").forEach((f) => {
-        if (/^relationship_(deed_file|sales_deed|sales_history_)(?:_\d+)?\.json$/.test(f) || /^sales_history_\d+\.json$/.test(f)) {
+        if (/^relationship_(deed_file|sales_deed|sales_history_|property_has_sales_history)(?:_\d+)?\.json$/.test(f) || /^sales_history_\d+\.json$/.test(f)) {
           const filePath = path.join("data", f);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
@@ -1652,6 +1665,16 @@ function writeSalesDeedsFilesAndRelationships($, propertySeed) {
     writeJSON(
       path.join("data", `relationship_sales_history_${idx}_has_deed_${idx}.json`),
       relSalesDeed,
+    );
+
+    // Create relationship from property to sales_history
+    const relPropertySales = {
+      from: { "/": `./property.json` },
+      to: { "/": `./sales_history_${idx}.json` },
+    };
+    writeJSON(
+      path.join("data", `relationship_property_has_sales_history_${idx}.json`),
+      relPropertySales,
     );
   });
 }
