@@ -2256,7 +2256,7 @@ function findCompanyIndexByName(name) {
 }
 
 function titleCaseName(s) {
-  if (!s) return s;
+  if (!s) return null;
   const trimmed = String(s).trim();
   if (!trimmed) return null;
   const result = trimmed
