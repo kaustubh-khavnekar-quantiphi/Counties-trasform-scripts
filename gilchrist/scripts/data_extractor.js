@@ -1484,6 +1484,34 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
       } catch (e) {}
     }
   }
+
+  // Additional cleanup: remove any leftover person/company files beyond the expected count
+  // This handles files from previous runs that had more entities
+  try {
+    const dataFiles = fs.readdirSync("data");
+    dataFiles.forEach((f) => {
+      const personMatch = f.match(/^person_(\d+)\.json$/);
+      const companyMatch = f.match(/^company_(\d+)\.json$/);
+
+      if (personMatch) {
+        const idx = parseInt(personMatch[1], 10);
+        if (idx > people.length) {
+          try {
+            fs.unlinkSync(path.join("data", f));
+          } catch (e) {}
+        }
+      }
+
+      if (companyMatch) {
+        const idx = parseInt(companyMatch[1], 10);
+        if (idx > companies.length) {
+          try {
+            fs.unlinkSync(path.join("data", f));
+          } catch (e) {}
+        }
+      }
+    });
+  } catch (e) {}
 }
 
 function extractHistoricalValuation($) {
