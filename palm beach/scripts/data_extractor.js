@@ -2267,77 +2267,7 @@ function main() {
       idx++;
     }
   }
-
-  // Write persons and companies with relationships
-  const ownersData = buildPersonsAndCompanies(ownerJSON, parcelId);
-
-  // Write person files
-  ownersData.persons.forEach((person, idx) => {
-    const personIndex = idx + 1;
-    writeJSON(path.join("data", `person_${personIndex}.json`), person);
-  });
-
-  // Write company files
-  ownersData.companies.forEach((company, idx) => {
-    const companyIndex = idx + 1;
-    writeJSON(path.join("data", `company_${companyIndex}.json`), company);
-  });
-
-  // Write relationships from property to current owners (persons)
-  ownersData.personCurrentOwners.forEach((personIndex) => {
-    writeJSON(path.join("data", `relationship_property_to_person_${personIndex}.json`), {
-      from: { "/": "./property.json" },
-      to: { "/": `./person_${personIndex}.json` },
-    });
-  });
-
-  // Write relationships from property to current owners (companies)
-  ownersData.companyCurrentOwners.forEach((companyIndex) => {
-    writeJSON(path.join("data", `relationship_property_to_company_${companyIndex}.json`), {
-      from: { "/": "./property.json" },
-      to: { "/": `./company_${companyIndex}.json` },
-    });
-  });
-
-  // Write relationships from sales to persons/companies based on ownership date
-  if (sales && ownerJSON) {
-    const key = `property_${parcelId}`;
-    const ownerRecord = ownerJSON[key];
-    if (ownerRecord && ownerRecord.owners_by_date) {
-      sales.forEach((s, idx) => {
-        const saleIndex = idx + 1;
-        const saleDate = convertDateFormat(s.SaleDate);
-        if (saleDate && ownerRecord.owners_by_date[saleDate]) {
-          const ownersAtDate = ownerRecord.owners_by_date[saleDate];
-          ownersAtDate.forEach((owner) => {
-            if (owner.type === "person") {
-              const firstName = toTitleCase(owner.first_name);
-              const middleName = owner.middle_name ? toTitleCase(owner.middle_name) : null;
-              const lastName = toTitleCase(owner.last_name);
-              const personKey = `${firstName}|${middleName || ""}|${lastName}`;
-              const personIndex = ownersData.personIndexByKey.get(personKey);
-              if (personIndex) {
-                writeJSON(path.join("data", `relationship_sales_${saleIndex}_to_person_${personIndex}.json`), {
-                  from: { "/": `./sales_${saleIndex}.json` },
-                  to: { "/": `./person_${personIndex}.json` },
-                });
-              }
-            } else if (owner.type === "company") {
-              const companyName = (owner.name || "").trim();
-              const companyIndex = ownersData.companyIndexByName.get(companyName);
-              if (companyIndex) {
-                writeJSON(path.join("data", `relationship_sales_${saleIndex}_to_company_${companyIndex}.json`), {
-                  from: { "/": `./sales_${saleIndex}.json` },
-                  to: { "/": `./company_${companyIndex}.json` },
-                });
-              }
-            }
-          });
-        }
-      });
-    }
-  }
-
+  
 }
 
 if (require.main === module) {

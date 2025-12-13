@@ -1083,23 +1083,6 @@ const STREET_DIRECTIONS = new Set([
   "SW",
 ]);
 
-const UNIT_KEYWORDS = new Set([
-  "APT",
-  "APARTMENT",
-  "UNIT",
-  "STE",
-  "SUITE",
-  "BLDG",
-  "BUILDING",
-  "FL",
-  "FLOOR",
-  "RM",
-  "ROOM",
-  "LOT",
-  "SPACE",
-  "#",
-]);
-
 const STREET_SUFFIX_ENUM = [
   "Rds",
   "Blvd",
