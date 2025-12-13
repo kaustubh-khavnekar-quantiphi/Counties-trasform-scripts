@@ -1319,10 +1319,16 @@ function writeSalesDeedsFilesAndRelationships($, requestIdentifier) {
     /^file_\d+\.json$/i,
     /^relationship_sales_deed_\d+\.json$/i,
     /^relationship_deed_file_\d+\.json$/i,
-    /^relationship_sales_history_.*\.json$/i,
+    /^relationship_sales_history_\d+_has_deed\.json$/i,
+    /^relationship_sales_history_\d+_buyer_(person|company)_\d+\.json$/i,
     /^relationship_sales_person_\d+\.json$/i,
     /^relationship_sales_company_\d+\.json$/i,
     /^relationship_property_has_sales_history_.*\.json$/i,
+    /^person_\d+\.json$/i,
+    /^company_\d+\.json$/i,
+    /^mailing_address\.json$/i,
+    /^relationship_person_has_mailing_address_\d+\.json$/i,
+    /^relationship_company_has_mailing_address_\d+\.json$/i,
   ];
 
   try {
