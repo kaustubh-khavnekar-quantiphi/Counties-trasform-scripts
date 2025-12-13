@@ -1472,14 +1472,20 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
   for (let i = 1; i <= people.length; i++) {
     if (!usedPersonIdx.has(i)) {
       try {
-        fs.unlinkSync(path.join("data", `person_${i}.json`));
+        const personFile = path.join("data", `person_${i}.json`);
+        if (fs.existsSync(personFile)) {
+          fs.unlinkSync(personFile);
+        }
       } catch (e) {}
     }
   }
   for (let i = 1; i <= companies.length; i++) {
     if (!usedCompanyIdx.has(i)) {
       try {
-        fs.unlinkSync(path.join("data", `company_${i}.json`));
+        const companyFile = path.join("data", `company_${i}.json`);
+        if (fs.existsSync(companyFile)) {
+          fs.unlinkSync(companyFile);
+        }
       } catch (e) {}
     }
   }
@@ -1494,7 +1500,8 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
 
       if (personMatch) {
         const idx = parseInt(personMatch[1], 10);
-        if (idx > people.length) {
+        // Remove if index is beyond expected count OR if it's not marked as used
+        if (idx > people.length || !usedPersonIdx.has(idx)) {
           try {
             fs.unlinkSync(path.join("data", f));
           } catch (e) {}
@@ -1503,7 +1510,8 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
 
       if (companyMatch) {
         const idx = parseInt(companyMatch[1], 10);
-        if (idx > companies.length) {
+        // Remove if index is beyond expected count OR if it's not marked as used
+        if (idx > companies.length || !usedCompanyIdx.has(idx)) {
           try {
             fs.unlinkSync(path.join("data", f));
           } catch (e) {}
