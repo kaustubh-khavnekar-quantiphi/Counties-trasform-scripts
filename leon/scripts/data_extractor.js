@@ -1229,6 +1229,16 @@ function extractOwners(ownerData, outDir, parcelId, salesCount, mailingAddress) 
     }
   });
 
+  // Only create person/company files if they will have relationships
+  // (either to sales or to mailing address)
+  const hasMailingAddress = mailingAddress && mailingAddress.trim().length > 0;
+  const willHaveRelationships = salesCount > 0 || hasMailingAddress;
+
+  if (!willHaveRelationships) {
+    // Don't create person/company files if they won't have any relationships
+    return result;
+  }
+
   let cIdx = 1,
     pIdx = 1;
   const fileMap = new Map();
