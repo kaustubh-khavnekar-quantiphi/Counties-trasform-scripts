@@ -1426,6 +1426,18 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
         }
       }
     });
+
+    // If no relationships were created to mailing_address, delete the file to avoid "unused file" error
+    if (relPersonCounter === 0 && relCompanyCounter === 0) {
+      try {
+        const mailingAddressPath = path.join("data", "mailing_address.json");
+        if (fs.existsSync(mailingAddressPath)) {
+          fs.unlinkSync(mailingAddressPath);
+        }
+      } catch (e) {
+        // Ignore deletion errors
+      }
+    }
   }
 
   // Step 3: Cleanup orphaned person/company files that don't have relationships
