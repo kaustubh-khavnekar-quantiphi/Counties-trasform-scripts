@@ -1517,6 +1517,49 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
       }
     });
   } catch (e) {}
+
+  // Final robust cleanup: scan all relationship files to find actually referenced entities
+  // This is the source of truth - if a person/company is not referenced, remove it
+  try {
+    const dataFiles = fs.readdirSync("data");
+    const relationshipFiles = dataFiles.filter((f) => f.startsWith("relationship_") && f.endsWith(".json"));
+
+    // Build set of all referenced person and company files by scanning relationship files
+    const referencedFiles = new Set();
+    relationshipFiles.forEach((relFile) => {
+      try {
+        const relContent = fs.readFileSync(path.join("data", relFile), "utf8");
+        const relData = JSON.parse(relContent);
+
+        // Check both 'from' and 'to' fields
+        if (relData.from && relData.from["/"]) {
+          const fromFile = relData.from["/"].replace("./", "");
+          if (fromFile.startsWith("person_") || fromFile.startsWith("company_")) {
+            referencedFiles.add(fromFile);
+          }
+        }
+        if (relData.to && relData.to["/"]) {
+          const toFile = relData.to["/"].replace("./", "");
+          if (toFile.startsWith("person_") || toFile.startsWith("company_")) {
+            referencedFiles.add(toFile);
+          }
+        }
+      } catch (e) {
+        // Ignore errors reading individual relationship files
+      }
+    });
+
+    // Remove any person/company files that are not referenced
+    dataFiles.forEach((f) => {
+      if ((f.startsWith("person_") || f.startsWith("company_")) && f.endsWith(".json")) {
+        if (!referencedFiles.has(f)) {
+          try {
+            fs.unlinkSync(path.join("data", f));
+          } catch (e) {}
+        }
+      }
+    });
+  } catch (e) {}
 }
 
 function extractHistoricalValuation($) {
