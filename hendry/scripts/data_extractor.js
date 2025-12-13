@@ -1214,8 +1214,6 @@ const NAME_SUFFIX_MAP = new Map([
   ["ii", "II"],
   ["iii", "III"],
   ["iv", "IV"],
-  ["v", "V"],
-  ["vi", "VI"],
   ["md", "MD"],
   ["phd", "PhD"],
   ["dds", "DDS"],
