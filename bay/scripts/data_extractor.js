@@ -2307,19 +2307,38 @@ function findPersonIndexByName(first, last) {
 function findCompanyIndexByName(name) {
   const raw = (name || "").trim();
   const tn = raw.toUpperCase();
+
+  // Try exact match
   for (let i = 0; i < companies.length; i++) {
     if ((companies[i].name || "").trim() === tn) return i + 1;
   }
+
+  // Try normalized variant match
   const normalized = normalizeOwnerKey(raw);
   if (normalized && ownerVariantMap.has(normalized)) {
     const entry = ownerVariantMap.get(normalized);
     if (entry.type === "company") return entry.index;
   }
+
+  // Try canonical key match (only if it points to a company)
   const canonical = buildCanonicalOwnerKey(raw);
   if (canonical && ownerCanonicalMap.has(canonical)) {
     const entry = ownerCanonicalMap.get(canonical);
     if (entry.type === "company") return entry.index;
   }
+
+  // Fallback: fuzzy match by comparing canonical keys
+  // This handles cases where the canonical key is registered for a person
+  // but we're looking for a company with similar name
+  if (canonical) {
+    for (let i = 0; i < companies.length; i++) {
+      const companyCanonical = buildCanonicalOwnerKey(companies[i].name || "");
+      if (companyCanonical === canonical) {
+        return i + 1;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -2344,8 +2363,32 @@ function writePersonCompaniesSalesRelationships(
   hasOwnerMailingAddress,
 ) {
   const owners = readJSON(path.join("owners", "owner_data.json"));
-  const key = `property_${parcelId}`;
-  const record = owners && owners[key] ? owners[key] : null;
+
+  // Try to find owner data with multiple parcelId formats
+  let record = null;
+  if (owners) {
+    // Try as-is
+    let key = `property_${parcelId}`;
+    record = owners[key] || null;
+
+    // Try with dashes removed
+    if (!record && parcelId) {
+      const noDashes = String(parcelId).replace(/[-]/g, "");
+      key = `property_${noDashes}`;
+      record = owners[key] || null;
+    }
+
+    // Try with dashes added (format: 00000-000-000)
+    if (!record && parcelId) {
+      const withDashes = String(parcelId).replace(/[-]/g, "");
+      if (withDashes.length === 11) {
+        const formatted = `${withDashes.slice(0, 5)}-${withDashes.slice(5, 8)}-${withDashes.slice(8, 11)}`;
+        key = `property_${formatted}`;
+        record = owners[key] || null;
+      }
+    }
+  }
+
   const ownersByDate =
     record && record.owners_by_date && typeof record.owners_by_date === "object"
       ? record.owners_by_date
