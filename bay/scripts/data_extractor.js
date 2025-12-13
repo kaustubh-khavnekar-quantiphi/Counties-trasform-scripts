@@ -2183,6 +2183,7 @@ function createPersonFromRaw(raw, parcelId) {
       ...baseFields,
     };
   }
+  // Names without commas are in "First Middle Last" order
   const parts = cleaned.split(/\s+/).filter(Boolean);
   if (parts.length === 1) {
     return {
@@ -2193,16 +2194,18 @@ function createPersonFromRaw(raw, parcelId) {
     };
   }
   if (parts.length === 2) {
+    // "First Last" order
     return {
-      first_name: titleCaseName(parts[1]),
+      first_name: titleCaseName(parts[0]),
       middle_name: null,
-      last_name: titleCaseName(parts[0]),
+      last_name: titleCaseName(parts[1]),
       ...baseFields,
     };
   }
-  const first = titleCaseName(parts[1]);
-  const last = titleCaseName(parts[0]);
-  const middle = titleCaseMiddleName(parts.slice(2).join(" "));
+  // "First Middle Last" order (3+ parts)
+  const first = titleCaseName(parts[0]);
+  const last = titleCaseName(parts[parts.length - 1]);
+  const middle = titleCaseMiddleName(parts.slice(1, -1).join(" "));
   return {
     first_name: first,
     middle_name: middle || null,
@@ -2233,7 +2236,8 @@ function ensureOwnerRefFromRaw(raw, parcelId) {
   if (ownerType === "person") {
     const personObj = createPersonFromRaw(raw, parcelId);
     // Validate that person has valid first_name and last_name before creating
-    if (!personObj.first_name || !personObj.last_name) {
+    // Also require last_name to be at least 2 characters (not just a single initial)
+    if (!personObj.first_name || !personObj.last_name || personObj.last_name.length < 2) {
       return null;
     }
     people.push(personObj);
