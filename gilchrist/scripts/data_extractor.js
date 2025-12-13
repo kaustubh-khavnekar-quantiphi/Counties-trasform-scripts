@@ -1268,31 +1268,18 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
     });
   } catch (e) {}
 
-  // First, determine which persons and companies will actually have relationships
-  // by checking if they match any sale date or are current owners with relationships
+  // Collect all persons and companies from ownersByDate
+  // Skip unknown_date entries as these are grantors who never became grantees
   const saleDates = sales.map((rec) => parseDateToISO(rec.saleDate));
   const currentOwners = ownersByDate["current"] || [];
 
   const personMap = new Map();
   const companyNames = new Set();
 
-  // Determine if current owners will have relationships
-  // Current owners get relationships if: (1) there are sales, OR (2) there is mailing address
-  const currentOwnersWillHaveRelationships = sales.length > 0 || hasOwnerMailingAddress;
-
-  // Only include persons and companies who will have relationships
+  // Collect all persons and companies (excluding unknown_date entries)
   Object.entries(ownersByDate).forEach(([dateKey, arr]) => {
     // Skip unknown_date entries as these are grantors who never became grantees
     if (dateKey.startsWith("unknown_date")) {
-      return;
-    }
-
-    // Check if this date matches a sale OR if owners are current owners who will have relationships
-    const dateMatchesSale = saleDates.includes(dateKey);
-    const isCurrentOwner = dateKey === "current";
-
-    // Only process if this date will result in relationships
-    if (!dateMatchesSale && !(isCurrentOwner && currentOwnersWillHaveRelationships)) {
       return;
     }
 
