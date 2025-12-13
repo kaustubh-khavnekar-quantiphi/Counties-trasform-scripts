@@ -2467,6 +2467,18 @@ function titleCaseName(s) {
   // This handles cases like "Flynn -J" which should become "Flynn-J"
   result = result.replace(/([ \-',.])(?=[ \-',.])/g, '');
 
+  // Remove trailing separators (e.g., "Flynn-" → "Flynn", "H." → "H")
+  while (/[ \-',.]$/.test(result)) {
+    result = result.slice(0, -1);
+  }
+
+  // Remove leading separators (edge case safety)
+  while (/^[ \-',.]/.test(result)) {
+    result = result.slice(1);
+  }
+
+  if (!result || result.length === 0) return null;
+
   // Validate against the required pattern
   if (!/^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/.test(result)) return null;
 
