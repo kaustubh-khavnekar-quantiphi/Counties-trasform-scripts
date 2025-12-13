@@ -1957,6 +1957,34 @@ function createGeometryClass(geometryInstances) {
 
 function main() {
   ensureDir("data");
+
+  // CRITICAL: Remove ALL old person and company files at the very start to prevent orphaned files
+  try {
+    const dataDir = "data";
+    if (fs.existsSync(dataDir)) {
+      const allFiles = fs.readdirSync(dataDir);
+      allFiles.forEach((f) => {
+        // Remove any person or company files from previous runs
+        if (
+          /^person_\d+\.json$/.test(f) ||
+          /^company_\d+\.json$/.test(f) ||
+          /^relationship_sales_person_\d+\.json$/.test(f) ||
+          /^relationship_sales_company_\d+\.json$/.test(f) ||
+          /^relationship_person_has_mailing_address_\d+\.json$/.test(f) ||
+          /^relationship_company_has_mailing_address_\d+\.json$/.test(f)
+        ) {
+          try {
+            fs.unlinkSync(path.join(dataDir, f));
+          } catch (e) {
+            // Ignore file deletion errors
+          }
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore directory read errors
+  }
+
   const $ = loadHTML();
 
   const propertySeed = readJSON("property_seed.json");
