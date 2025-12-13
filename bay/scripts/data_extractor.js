@@ -2347,14 +2347,32 @@ function titleCaseName(s) {
   if (!s) return null;
   const trimmed = String(s).trim();
   if (!trimmed) return null;
-  const result = trimmed
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+
+  // Split by separators while preserving them
+  const parts = trimmed.toLowerCase().split(/([ \-',.])/);
+  let result = '';
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    // If it's a separator, just add it
+    if (/^[ \-',.]$/.test(part)) {
+      result += part;
+      continue;
+    }
+
+    // If it's a word, capitalize first letter
+    if (part.length > 0) {
+      result += part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }
+  }
+
   if (!result || result.length === 0) return null;
-  if (!/^[A-Z][a-zA-Z\s\-',.]*$/.test(result)) return null;
+
+  // Validate against the required pattern
+  if (!/^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/.test(result)) return null;
+
   return result;
 }
 
