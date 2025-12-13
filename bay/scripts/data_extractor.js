@@ -1944,6 +1944,7 @@ function cleanOwnerRawString(value) {
   if (value == null) return "";
   return String(value)
     .replace(/\*/g, "")
+    .replace(/\([^)]*\)/g, "") // Remove parenthetical content (e.g., "(INCL 3016-000)")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1979,7 +1980,11 @@ function splitOwnerRawNames(raw) {
     .replace(/\s+&\s+/g, "|")
     .replace(/&/g, "|")
     .replace(/,\s+AND\s+/gi, "|")
-    .replace(/\s+AND\s+/gi, "|");
+    .replace(/\s+AND\s+/gi, "|")
+    .replace(/\s+WIFE\s+/gi, "|")
+    .replace(/\s+HUSBAND\s+/gi, "|")
+    .replace(/\s+H\/W\s+/gi, "|")
+    .replace(/\s+W\/H\s+/gi, "|");
   return replaced
     .split("|")
     .map((part) => cleanOwnerRawString(part))
@@ -2177,49 +2182,108 @@ function createPersonFromRaw(raw, parcelId) {
       ...baseFields,
     };
   }
+
+  // Helper function to detect and extract suffix
+  function extractSuffix(parts) {
+    if (parts.length === 0) return { parts, suffix: null };
+    const lastPart = parts[parts.length - 1].toUpperCase().replace(/\./g, '');
+    const suffixes = ['JR', 'SR', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    if (suffixes.includes(lastPart)) {
+      return {
+        parts: parts.slice(0, -1),
+        suffix: titleCaseName(lastPart) // Apply titleCaseName to format the suffix
+      };
+    }
+    return { parts, suffix: null };
+  }
+
   if (cleaned.includes(",")) {
     const [lastRaw, restRaw] = cleaned.split(",", 2);
     const restParts = restRaw.trim().split(/\s+/).filter(Boolean);
-    const first = restParts[0] ? titleCaseName(restParts[0]) : null;
+    const { parts: nameParts, suffix } = extractSuffix(restParts);
+
+    // If after extracting suffix, no name parts remain, it means the format is "First Middle Last, Suffix"
+    // not "Last, First". In this case, parse the first part as "First Middle Last"
+    if (nameParts.length === 0) {
+      const fullNameParts = lastRaw.trim().split(/\s+/).filter(Boolean);
+      if (fullNameParts.length === 1) {
+        return {
+          first_name: titleCaseName(fullNameParts[0]),
+          middle_name: null,
+          last_name: null,
+          ...baseFields,
+          suffix_name: suffix,
+        };
+      } else if (fullNameParts.length === 2) {
+        return {
+          first_name: titleCaseName(fullNameParts[0]),
+          middle_name: null,
+          last_name: titleCaseName(fullNameParts[1]),
+          ...baseFields,
+          suffix_name: suffix,
+        };
+      } else {
+        // 3+ parts: First Middle... Last
+        const first = titleCaseName(fullNameParts[0]);
+        const last = titleCaseName(fullNameParts[fullNameParts.length - 1]);
+        const middle = titleCaseMiddleName(fullNameParts.slice(1, -1).join(" "));
+        return {
+          first_name: first,
+          middle_name: middle || null,
+          last_name: last,
+          ...baseFields,
+          suffix_name: suffix,
+        };
+      }
+    }
+
+    // Standard "Last, First Middle" format
+    const first = nameParts[0] ? titleCaseName(nameParts[0]) : null;
     let middle = null;
-    if (restParts.length > 1) {
-      middle = titleCaseMiddleName(restParts.slice(1).join(" "));
+    if (nameParts.length > 1) {
+      middle = titleCaseMiddleName(nameParts.slice(1).join(" "));
     }
     return {
       first_name: first,
       middle_name: middle,
       last_name: lastRaw ? titleCaseName(lastRaw) : null,
       ...baseFields,
+      suffix_name: suffix,
     };
   }
   // Names without commas are in "First Middle Last" order
   const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) {
+  const { parts: nameParts, suffix } = extractSuffix(parts);
+
+  if (nameParts.length === 1) {
     return {
-      first_name: titleCaseName(parts[0]),
+      first_name: titleCaseName(nameParts[0]),
       middle_name: null,
       last_name: null,
       ...baseFields,
+      suffix_name: suffix,
     };
   }
-  if (parts.length === 2) {
+  if (nameParts.length === 2) {
     // "First Last" order
     return {
-      first_name: titleCaseName(parts[0]),
+      first_name: titleCaseName(nameParts[0]),
       middle_name: null,
-      last_name: titleCaseName(parts[1]),
+      last_name: titleCaseName(nameParts[1]),
       ...baseFields,
+      suffix_name: suffix,
     };
   }
   // "First Middle Last" order (3+ parts)
-  const first = titleCaseName(parts[0]);
-  const last = titleCaseName(parts[parts.length - 1]);
-  const middle = titleCaseMiddleName(parts.slice(1, -1).join(" "));
+  const first = titleCaseName(nameParts[0]);
+  const last = titleCaseName(nameParts[nameParts.length - 1]);
+  const middle = titleCaseMiddleName(nameParts.slice(1, -1).join(" "));
   return {
     first_name: first,
     middle_name: middle || null,
     last_name: last,
     ...baseFields,
+    suffix_name: suffix,
   };
 }
 
