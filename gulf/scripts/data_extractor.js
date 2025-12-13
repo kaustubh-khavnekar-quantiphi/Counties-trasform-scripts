@@ -1276,7 +1276,15 @@ function writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailing
   const key = `property_${parcelId}`;
   const record = owners[key];
   if (!record || !record.owners_by_date) return;
-  const ownersByDate = record.owners_by_date;
+  let ownersByDate = record.owners_by_date;
+
+  // Remove records with keys starting with 'unknown_date_' to prevent orphaned person/company files
+  // These represent grantors that couldn't be matched to a grantee date and cannot be linked to sales
+  Object.keys(ownersByDate).forEach(dateKey => {
+    if (dateKey.startsWith('unknown_date_')) {
+      delete ownersByDate[dateKey];
+    }
+  });
 
   // Maps to track created entities: key -> entity data
   const personMap = new Map(); // key: "FIRSTNAME|LASTNAME" -> person data
