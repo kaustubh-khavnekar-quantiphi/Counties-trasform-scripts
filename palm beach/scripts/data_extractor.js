@@ -2173,63 +2173,9 @@ function main() {
     });
   }
 
-  // Owners (persons/companies) - collect but don't write yet
-  const pc = buildPersonsAndCompanies(ownerJSON, parcelId);
-
-  // Track which persons/companies are actually used in relationships
-  const usedPersonIndices = new Set();
-  const usedCompanyIndices = new Set();
-
-  // Only write mailing_address.json if there are current owners to reference it
-  const hasCurrentOwners = pc.personCurrentOwners.length > 0 || pc.companyCurrentOwners.length > 0;
-  if (mailingAddressObj && hasCurrentOwners) {
-    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
-
-    pc.personCurrentOwners.forEach((idx, i) => {
-      usedPersonIndices.add(idx);
-      writeJSON(
-        path.join(
-          "data",
-          `relationship_person_has_mailing_address_${idx}.json`,
-        ),
-        {
-          from: { "/": `./person_${idx}.json` },
-          to: { "/": `./mailing_address.json` },
-        }
-      );
-    });
-    pc.companyCurrentOwners.forEach((idx, i) => {
-      usedCompanyIndices.add(idx);
-      writeJSON(
-        path.join(
-          "data",
-          `relationship_company_has_mailing_address_${idx}.json`,
-        ),
-        {
-          from: { "/": `./company_${idx}.json` },
-          to: { "/": `./mailing_address.json` },
-        }
-      );
-    });
-  }
-
-  // Note: Do not create relationships from sales to persons/companies
-  // because persons/companies are not part of the Sales_History data group.
-  // Only persons that are current owners (with mailing addresses) should be written.
-
-  // Now write only the persons and companies that are actually used in relationships
-  pc.persons.forEach((p, i) => {
-    const personIndex = i + 1;
-    if (usedPersonIndices.has(personIndex)) {
-      writeJSON(path.join("data", `person_${personIndex}.json`), p);
-    }
-  });
-  pc.companies.forEach((c, i) => {
-    const companyIndex = i + 1;
-    if (usedCompanyIndices.has(companyIndex)) {
-      writeJSON(path.join("data", `company_${companyIndex}.json`), c);
-    }
-  });
+  // Note: Persons and companies are not part of the Sales_History data group,
+  // so they should not be written. Mailing address is also not written since
+  // there are no entities in this data group that can reference it.
   // Layout extraction from owners/layout_data.json
   if (layoutData) {
     const lset =
