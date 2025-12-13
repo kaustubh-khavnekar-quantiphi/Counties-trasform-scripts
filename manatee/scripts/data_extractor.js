@@ -2547,6 +2547,13 @@ function titleCaseName(s) {
   return result;
 }
 
+function isValidPersonName(name) {
+  if (!name || typeof name !== 'string') return false;
+  // Validate against the Elephant schema pattern for person names
+  const namePattern = /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/;
+  return namePattern.test(name.trim());
+}
+
 function writeJSON(p, obj) {
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf8");
@@ -3191,7 +3198,14 @@ function main() {
             veteran_status: null,
             request_identifier: parcel.parcel_identifier,
           }))
-          .filter((p) => p.first_name && p.last_name); // Only include persons with valid first and last names
+          .filter((p) => {
+            // Only include persons with valid first and last names that match the schema pattern
+            if (!p.first_name || !p.last_name) return false;
+            if (!isValidPersonName(p.first_name) || !isValidPersonName(p.last_name)) return false;
+            // Middle name is optional, but if present, must be valid
+            if (p.middle_name && !isValidPersonName(p.middle_name)) return false;
+            return true;
+          });
         people.forEach((p, idx) => {
 
         });
