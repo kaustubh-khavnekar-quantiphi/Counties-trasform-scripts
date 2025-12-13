@@ -2379,7 +2379,7 @@ function titleCaseName(s) {
 function writePersonCompaniesSalesRelationships(
   parcelId,
   sales,
-  hasOwnerMailingAddress,
+  mailingAddressData,
 ) {
   const owners = readJSON(path.join("owners", "owner_data.json"));
 
@@ -2609,10 +2609,12 @@ function writePersonCompaniesSalesRelationships(
     });
   });
 
-  if (hasOwnerMailingAddress) {
+  // Only create mailing_address.json if we have current owners to reference it
+  if (mailingAddressData) {
     const mailingRelationshipPatterns = [
       /^relationship_person_has_mailing_address_\d+\.json$/i,
       /^relationship_company_has_mailing_address_\d+\.json$/i,
+      /^mailing_address\.json$/i,
     ];
     try {
       fs.readdirSync("data").forEach((f) => {
@@ -2627,6 +2629,11 @@ function writePersonCompaniesSalesRelationships(
     let relCompanyCounter = 0;
     const seenMailingPerson = new Set();
     const seenMailingCompany = new Set();
+
+    // Collect owners that will reference the mailing address
+    const personsWithMailing = [];
+    const companiesWithMailing = [];
+
     currentOwner
     .filter((o) => o.type === "person")
     .forEach((o) => {
@@ -2634,6 +2641,34 @@ function writePersonCompaniesSalesRelationships(
       if (pIdx && !seenMailingPerson.has(pIdx)) {
         seenMailingPerson.add(pIdx);
         usedPersonIdx.add(pIdx);
+        personsWithMailing.push(pIdx);
+      }
+    });
+
+    currentOwner
+    .filter((o) => o.type === "company")
+    .forEach((o) => {
+      const cIdx = findCompanyIndexByName(o.name);
+      if (cIdx && !seenMailingCompany.has(cIdx)) {
+        seenMailingCompany.add(cIdx);
+        usedCompanyIdx.add(cIdx);
+        companiesWithMailing.push(cIdx);
+      }
+    });
+
+    // Only create mailing_address.json if there are owners to reference it
+    if (personsWithMailing.length > 0 || companiesWithMailing.length > 0) {
+      const mailingAddressObj = {
+        latitude: null,
+        longitude: null,
+        unnormalized_address: mailingAddressData.mailingAddress,
+        source_http_request: mailingAddressData.sourceHttpRequest,
+        request_identifier: mailingAddressData.requestIdentifier,
+      };
+      writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
+
+      // Create relationships for persons
+      personsWithMailing.forEach((pIdx) => {
         relPersonCounter++;
         writeJSON(
           path.join(
@@ -2645,15 +2680,10 @@ function writePersonCompaniesSalesRelationships(
             to: { "/": `./mailing_address.json` },
           },
         );
-      }
-    });
-    currentOwner
-    .filter((o) => o.type === "company")
-    .forEach((o) => {
-      const cIdx = findCompanyIndexByName(o.name);
-      if (cIdx && !seenMailingCompany.has(cIdx)) {
-        seenMailingCompany.add(cIdx);
-        usedCompanyIdx.add(cIdx);
+      });
+
+      // Create relationships for companies
+      companiesWithMailing.forEach((cIdx) => {
         relCompanyCounter++;
         writeJSON(
           path.join(
@@ -2665,8 +2695,8 @@ function writePersonCompaniesSalesRelationships(
             to: { "/": `./mailing_address.json` },
           },
         );
-      }
-    });
+      });
+    }
   }
 
   removeUnusedOwnerFiles(usedPersonIdx, usedCompanyIdx);
@@ -2742,7 +2772,17 @@ function attemptWriteAddress(
   mailingAddress,
   propertySeed,
 ) {
-  let hasOwnerMailingAddress = false;
+  // Store mailing address data for later use, but don't write file yet
+  const mailingAddressData = mailingAddress ? {
+    mailingAddress,
+    sourceHttpRequest: (propertySeed && propertySeed.source_http_request) ||
+      (unnorm && unnorm.source_http_request) ||
+      null,
+    requestIdentifier: (propertySeed && propertySeed.request_identifier) ||
+      (unnorm && unnorm.request_identifier) ||
+      null,
+  } : null;
+
   const unnormSafe = unnorm || {};
   const inputCounty = (unnormSafe.county_jurisdiction || "").trim();
   const county_name = inputCounty || null;
@@ -2755,17 +2795,6 @@ function attemptWriteAddress(
     (unnormSafe && unnormSafe.request_identifier) ||
     null;
   const country_code = (unnormSafe && unnormSafe.country_code) || "US";
-  if (mailingAddress) {
-    const mailingAddressObj = {
-      latitude: null,
-      longitude: null,
-      unnormalized_address: mailingAddress,
-      source_http_request: sourceHttpRequest,
-      request_identifier: requestIdentifier,
-    };
-    writeJSON(path.join("data", "mailing_address.json"), mailingAddressObj);
-    hasOwnerMailingAddress = true;
-  }
   if (siteAddress) {
     const addressObj = {
       unnormalized_address: siteAddress,
@@ -2816,7 +2845,7 @@ function attemptWriteAddress(
       to: { "/": "./geometry.json" },
     });
   }
-  return hasOwnerMailingAddress;
+  return mailingAddressData;
 }
 
 function main() {
@@ -2859,7 +2888,7 @@ function main() {
   const secTwpRng = extractSecTwpRng($);
   const addressText = extractAddressText($);
   const mailingAddress = extractOwnerMailingAddress($);
-  const hasOwnerMailingAddress = attemptWriteAddress(
+  const mailingAddressData = attemptWriteAddress(
     unnormalized,
     secTwpRng,
     addressText,
@@ -2883,7 +2912,7 @@ function main() {
       parcelId,
     );
 
-    writePersonCompaniesSalesRelationships(parcelId, sales, hasOwnerMailingAddress);
+    writePersonCompaniesSalesRelationships(parcelId, sales, mailingAddressData);
   }
 }
 
