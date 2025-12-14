@@ -304,7 +304,7 @@ function classifyOwner(raw) {
     const lookup = normalizeTokenForLookup(tokens[tokens.length - 1]);
     const canonical = NAME_SUFFIX_MAP.get(lookup);
     if (!canonical) break;
-    suffix = suffix ? `${canonical} ${suffix}` : canonical;
+    if (!suffix) suffix = canonical;
     tokens.pop();
   }
 
