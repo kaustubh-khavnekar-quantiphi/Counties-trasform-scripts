@@ -2580,6 +2580,17 @@ function titleCaseMiddleName(s) {
   // Normalize multiple consecutive separators (e.g., "John  Doe" → "John Doe")
   result = result.replace(/([ \-',.])(?=[ \-',.])/g, '');
 
+  // Remove any trailing separators created by normalization
+  while (/[ \-',.]$/.test(result)) {
+    result = result.slice(0, -1);
+  }
+
+  // Remove any leading separators created by normalization
+  while (/^[ \-',.]/.test(result)) {
+    result = result.slice(1);
+  }
+
+  // Final empty check after all processing
   if (!result || result.length === 0) return null;
 
   // Validate against the middle name pattern: ^[A-Z][a-zA-Z\s\-',.]*$
