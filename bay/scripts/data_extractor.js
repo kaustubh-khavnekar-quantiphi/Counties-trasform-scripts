@@ -2189,6 +2189,40 @@ function createPersonFromRaw(raw, parcelId) {
     };
   }
 
+  // Helper function to format suffix according to schema
+  function formatSuffix(suffix) {
+    if (!suffix) return null;
+    const upper = suffix.toUpperCase().replace(/\./g, '');
+    // Map to schema-compliant suffix values
+    const suffixMap = {
+      'JR': 'Jr.',
+      'SR': 'Sr.',
+      'II': 'II',
+      'III': 'III',
+      'IV': 'IV',
+      'V': 'V',
+      'VI': 'VI',
+      'VII': 'VII',
+      'VIII': 'VIII',
+      'IX': 'IX',
+      'X': 'X',
+      'PHD': 'PhD',
+      'MD': 'MD',
+      'ESQ': 'Esq.',
+      'JD': 'JD',
+      'LLM': 'LLM',
+      'MBA': 'MBA',
+      'RN': 'RN',
+      'DDS': 'DDS',
+      'DVM': 'DVM',
+      'CFA': 'CFA',
+      'CPA': 'CPA',
+      'PE': 'PE',
+      'PMP': 'PMP',
+    };
+    return suffixMap[upper] || null;
+  }
+
   // Helper function to detect and extract suffix
   function extractSuffix(parts) {
     if (parts.length === 0) return { parts, suffix: null };
@@ -2199,7 +2233,7 @@ function createPersonFromRaw(raw, parcelId) {
     if (suffixes.includes(lastPart)) {
       return {
         parts: parts.slice(0, -1),
-        suffix: titleCaseName(lastPart) // Apply titleCaseName to format the suffix
+        suffix: formatSuffix(lastPart) // Format suffix according to schema
       };
     }
     // Remove Latin abbreviations but don't treat them as suffixes
@@ -2331,7 +2365,13 @@ function ensureOwnerRefFromRaw(raw, parcelId) {
     if (typeof personObj.first_name !== 'string' || typeof personObj.last_name !== 'string') {
       return null;
     }
-    if (personObj.first_name.length < 1 || personObj.last_name.length < 2) {
+    // Require both first_name and last_name to have at least 2 characters
+    if (personObj.first_name.length < 2 || personObj.last_name.length < 2) {
+      return null;
+    }
+    // Filter out invalid surnames that are actually qualifiers
+    const invalidSurnames = ['Wife', 'Husband', 'Etal', 'Trustee', 'Estate', 'Trust'];
+    if (invalidSurnames.includes(personObj.last_name)) {
       return null;
     }
     people.push(personObj);
@@ -2613,7 +2653,11 @@ function writePersonCompaniesSalesRelationships(
       // Validate that both first_name and last_name are valid strings
       if (!firstName || !lastName) return null;
       if (typeof firstName !== 'string' || typeof lastName !== 'string') return null;
-      if (firstName.length === 0 || lastName.length === 0) return null;
+      // Require first_name to have at least 2 chars and last_name to have at least 2 chars
+      if (firstName.length < 2 || lastName.length < 2) return null;
+      // Filter out invalid surnames that are actually qualifiers
+      const invalidSurnames = ['Wife', 'Husband', 'Etal', 'Trustee', 'Estate', 'Trust'];
+      if (invalidSurnames.includes(lastName)) return null;
 
       return {
         first_name: firstName,
