@@ -2546,11 +2546,6 @@ function writePersonCompaniesSalesRelationships(
   sales,
   mailingAddressData,
 ) {
-  // DISABLED: Person, Company, and Mailing Address entities are not part of the Sales_History data group
-  // The Sales_History data group only includes: file, property, and sales_history classes
-  // Therefore, we do not generate person, company, or mailing_address entities or their relationships
-  return;
-
   const owners = readJSON(path.join("owners", "owner_data.json"));
 
   // Try to find owner data with multiple parcelId formats
