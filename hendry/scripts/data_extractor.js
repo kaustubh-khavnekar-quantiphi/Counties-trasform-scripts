@@ -1818,9 +1818,28 @@ function writeSalesDeedsFilesAndRelationships(
     };
     writeJSON(path.join("data", fileFile), file);
 
-    writeRelationship(fileFile, deedFile);
-    writeRelationship(saleFile, deedFile);
-    writeRelationship(saleFile, fileFile);
+    // Write relationships with correct naming pattern
+    writeJSON(
+      path.join("data", `relationship_deed_${idx}_has_file_${idx}.json`),
+      {
+        from: { "/": `./${deedFile}` },
+        to: { "/": `./${fileFile}` },
+      }
+    );
+    writeJSON(
+      path.join("data", `relationship_sales_history_${idx}_has_deed.json`),
+      {
+        from: { "/": `./${saleFile}` },
+        to: { "/": `./${deedFile}` },
+      }
+    );
+    writeJSON(
+      path.join("data", `relationship_sales_history_${idx}_has_file_${idx}.json`),
+      {
+        from: { "/": `./${saleFile}` },
+        to: { "/": `./${fileFile}` },
+      }
+    );
   });
   return saleFiles;
 }
