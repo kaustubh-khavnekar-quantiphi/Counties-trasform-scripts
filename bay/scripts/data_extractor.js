@@ -1948,11 +1948,18 @@ function normalizeOwnerKey(value) {
 
 function cleanOwnerRawString(value) {
   if (value == null) return "";
-  return String(value)
+  let cleaned = String(value)
     .replace(/\*/g, "")
-    .replace(/\([^)]*\)/g, "") // Remove parenthetical content (e.g., "(INCL 3016-000)")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\([^)]*\)/g, ""); // Remove parenthetical content (e.g., "(INCL 3016-000)")
+
+  // Remove ownership fractions and qualifiers like "1/3 INT.", "1/2 INTEREST", etc.
+  cleaned = cleaned
+    .replace(/,\s*\d+\/\d+\s+(INT\.?|INTEREST|UNDIVIDED|UND\.?|INTST\.?).*$/i, "")
+    .replace(/\s+\d+\/\d+\s+(INT\.?|INTEREST|UNDIVIDED|UND\.?|INTST\.?).*$/i, "")
+    .replace(/,\s*(ETAL|ET\s*AL\.?|ET\s*UX\.?|ETUX).*$/i, "")
+    .replace(/\s+(ETAL|ET\s*AL\.?|ET\s*UX\.?|ETUX).*$/i, "");
+
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
 function hasMeaningfulOwnerName(value) {
