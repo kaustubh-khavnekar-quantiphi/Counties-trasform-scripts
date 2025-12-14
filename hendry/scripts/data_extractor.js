@@ -2031,6 +2031,83 @@ function writePersonCompaniesSalesRelationships(
     writeJSON(path.join("data", `company_${idxOneBased}.json`), companyRecord);
   });
 
+  // Create mailing address entities and relationships
+  removeMatchingDataFiles(/^mailing_address_\d+\.json$/);
+  removeMatchingDataFiles(/^relationship_person_\d+_has_mailing_address\.json$/);
+  removeMatchingDataFiles(/^relationship_company_\d+_has_mailing_address\.json$/);
+
+  const mailingAddressMap = new Map();
+  let mailingAddressCounter = 0;
+
+  // Collect unique mailing addresses
+  people.forEach((p, idx) => {
+    const address = p.mailing_address;
+    if (address && address.trim()) {
+      const normalized = address.trim();
+      if (!mailingAddressMap.has(normalized)) {
+        mailingAddressCounter++;
+        mailingAddressMap.set(normalized, {
+          index: mailingAddressCounter,
+          address: normalized,
+          persons: [],
+          companies: []
+        });
+      }
+      mailingAddressMap.get(normalized).persons.push(idx + 1);
+    }
+  });
+
+  companies.forEach((c, idx) => {
+    const address = c.mailing_address;
+    if (address && address.trim()) {
+      const normalized = address.trim();
+      if (!mailingAddressMap.has(normalized)) {
+        mailingAddressCounter++;
+        mailingAddressMap.set(normalized, {
+          index: mailingAddressCounter,
+          address: normalized,
+          persons: [],
+          companies: []
+        });
+      }
+      mailingAddressMap.get(normalized).companies.push(idx + 1);
+    }
+  });
+
+  // Write mailing address entities
+  mailingAddressMap.forEach((entry) => {
+    writeJSON(path.join("data", `mailing_address_${entry.index}.json`), {
+      unnormalized_address: entry.address,
+      latitude: null,
+      longitude: null,
+      source_http_request: sourceHttp,
+      request_identifier: baseRequestIdentifier,
+    });
+  });
+
+  // Write person_has_mailing_address relationships
+  mailingAddressMap.forEach((entry) => {
+    entry.persons.forEach((personIdx) => {
+      writeJSON(
+        path.join("data", `relationship_person_${personIdx}_has_mailing_address.json`),
+        {
+          from: { "/": `./person_${personIdx}.json` },
+          to: { "/": `./mailing_address_${entry.index}.json` }
+        }
+      );
+    });
+
+    entry.companies.forEach((companyIdx) => {
+      writeJSON(
+        path.join("data", `relationship_company_${companyIdx}_has_mailing_address.json`),
+        {
+          from: { "/": `./company_${companyIdx}.json` },
+          to: { "/": `./mailing_address_${entry.index}.json` }
+        }
+      );
+    });
+  });
+
   const linkedPersonIds = new Set();
   const linkedCompanyIds = new Set();
   // Relationships: ensure each sale links to grantee (or fallback grantor) and any recorded owners for that date

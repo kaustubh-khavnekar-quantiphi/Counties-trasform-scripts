@@ -141,7 +141,9 @@ const NAME_PREFIX_MAP = new Map([
 
 const NAME_SUFFIX_MAP = new Map([
   ["jr", "Jr."],
+  ["junior", "Jr."],
   ["sr", "Sr."],
+  ["senior", "Sr."],
   ["ii", "II"],
   ["iii", "III"],
   ["iv", "IV"],
