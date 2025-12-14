@@ -1788,8 +1788,25 @@ function writeSalesDeedsFilesAndRelationships(
     writeJSON(path.join("data", saleFile), saleObj);
     saleFiles.push(saleFile);
 
-    // Note: The Sales_History data group only contains file, property, and sales_history classes.
-    // There is no deed class, so we only generate file and relationship to file.
+    const deedFile = `deed_${idx}.json`;
+    const deedType = mapInstrumentToDeedType(s.instrument);
+    const deed = {
+      deed_type: deedType
+    };
+    if (parcelId) deed.request_identifier = parcelId;
+    if (sourceHttp) deed.source_http_request = sourceHttp;
+    const bookPageText = s.bookPage
+      ? s.bookPage.split("\n")[0].trim()
+      : null;
+    if (bookPageText) {
+      const bookPageMatch = bookPageText.match(/(\d+)\s*\/\s*(\d+)/);
+      if (bookPageMatch) {
+        deed.book = bookPageMatch[1];
+        deed.page = bookPageMatch[2];
+      }
+    }
+    writeJSON(path.join("data", deedFile), deed);
+
     const fileFile = `file_${idx}.json`;
     let fileName = s.bookPage ? s.bookPage.split("\n")[0] : null;
     const file = {
@@ -1801,7 +1818,21 @@ function writeSalesDeedsFilesAndRelationships(
     };
     writeJSON(path.join("data", fileFile), file);
 
-    // Write relationship between sales_history and file (no deed)
+    // Write relationships with correct naming pattern
+    writeJSON(
+      path.join("data", `relationship_deed_${idx}_has_file_${idx}.json`),
+      {
+        from: { "/": `./${deedFile}` },
+        to: { "/": `./${fileFile}` },
+      }
+    );
+    writeJSON(
+      path.join("data", `relationship_sales_history_${idx}_has_deed.json`),
+      {
+        from: { "/": `./${saleFile}` },
+        to: { "/": `./${deedFile}` },
+      }
+    );
     writeJSON(
       path.join("data", `relationship_sales_history_${idx}_has_file_${idx}.json`),
       {
