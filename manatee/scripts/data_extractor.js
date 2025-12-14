@@ -2947,17 +2947,22 @@ function main() {
   let salesOwnerMapping = {};
 
   // Cleanup old sales files (both sales_*.json and sales_history_*.json patterns)
+  // Also cleanup deed and person files which should not be in Sales_History data group
   try {
     fs.readdirSync("data").forEach((f) => {
       if (
         /^sales_history_\d+\.json$/.test(f) ||
         /^sales_\d+\.json$/.test(f) ||
         /^deed_\d+\.json$/.test(f) ||
+        /^person_\d+\.json$/.test(f) ||
         /^file_\d+\.json$/.test(f) ||
         /^relationship_deed_file_\d+\.json$/.test(f) ||
+        /^relationship_deed_\d+_has_file_\d+\.json$/.test(f) ||
         /^relationship_sales_deed_\d+\.json$/.test(f) ||
         /^relationship_sales_history_deed_\d+\.json$/.test(f) ||
         /^relationship_sales_history_has_deed_\d+\.json$/.test(f) ||
+        /^relationship_sales_history_\d+_has_file_\d+\.json$/.test(f) ||
+        /^relationship_sales_history_\d+_has_person_\d+\.json$/.test(f) ||
         /^relationship_property_has_sales_history_\d+\.json$/.test(f) ||
         /^relationship_.*_sales_history_.*\.json$/.test(f)
       ) {
@@ -3003,26 +3008,10 @@ function main() {
       writeOut(`relationship_property_has_sales_history_${i}.json`, relPropertySales);
       let book = bookIdx >= 0 ? row[bookIdx] || null : null;
       let page = pageIdx >= 0 ? row[pageIdx] || null : null;
-      let instrType = instrTypeIdx >= 0 ? row[instrTypeIdx] || null : null;
-      let grantee = granteeIdx >= 0 ? row[granteeIdx] || null : null;
       let instrNumber = instrNumberIdx >= 0 ? row[instrNumberIdx] || null : null;
-      let deedType = mapInstrumentToDeedType(instrType);
-      let deed = { deed_type: deedType };
-      if (book) {
-        deed.book = book;
-      }
-      if (page) {
-        deed.page = page;
-      }
-      if (instrNumber) {
-        deed.instrument_number = instrNumber;
-      }
-      writeOut(`deed_${i}.json`, deed);
-      const relSalesDeed = {
-        from: { "/": `./sales_history_${i}.json` },
-        to: { "/": `./deed_${i}.json` },
-      };
-      writeOut(`relationship_sales_history_has_deed_${i}.json`, relSalesDeed);
+
+      // Create file entity for deed document (Sales_History data group only has: file, property, sales_history)
+      // No deed or person entities should be created in Sales_History data group
       let link = null;
       if(instrNumber) {
         link = `https://records.manateeclerk.com/OfficialRecords/Search/InstrumentNumber?instrumentNumber=${instrNumber}`;
@@ -3031,13 +3020,14 @@ function main() {
           file_format: null,
           ipfs_url: null,
           name: `Deed ${instrNumber}`,
+          original_url: link,
         };
         writeOut(`file_${i}.json`, file);
-        const relDeedFile = {
-          from: { "/": `./deed_${i}.json` },
+        const relSalesFile = {
+          from: { "/": `./sales_history_${i}.json` },
           to: { "/": `./file_${i}.json` },
         };
-        writeOut(`relationship_deed_file_${i}.json`, relDeedFile);
+        writeOut(`relationship_sales_history_${i}_has_file_${i}.json`, relSalesFile);
       } else if(book && page) {
         link = `https://records.manateeclerk.com/OfficialRecords/Search/InstrumentBookPage/${book}/${page}`;
         const file = {
@@ -3045,16 +3035,14 @@ function main() {
           file_format: null,
           ipfs_url: null,
           name: `Deed ${book}/${page}`,
+          original_url: link,
         };
         writeOut(`file_${i}.json`, file);
-        const relDeedFile = {
-          from: { "/": `./deed_${i}.json` },
+        const relSalesFile = {
+          from: { "/": `./sales_history_${i}.json` },
           to: { "/": `./file_${i}.json` },
         };
-        writeOut(`relationship_deed_file_${i}.json`, relDeedFile);
-      }
-      if (grantee && ownership_transfer_date) {
-        salesOwnerMapping[ownership_transfer_date] = { grantee: grantee, salesIndex: i };
+        writeOut(`relationship_sales_history_${i}_has_file_${i}.json`, relSalesFile);
       }
       i++;
     }
@@ -3167,131 +3155,9 @@ function main() {
     }
   }
 
-  // Generate person entities and sales_history_has_person relationships from grantee data
-  // Parse grantee names from salesOwnerMapping and create person entities
-  const personMap = new Map();
-  Object.entries(salesOwnerMapping).forEach(([date, data]) => {
-    const grantee = data.grantee || "";
-    const salesIndex = data.salesIndex;
-
-    // Split grantee by & to separate multiple people (don't split by comma as that's part of LAST, FIRST format)
-    const rawNames = grantee.split(/\s*&\s*/).map(n => n.trim()).filter(Boolean);
-
-    rawNames.forEach(rawName => {
-      // Clean up extra text like trust info, dates, etc
-      let cleanName = rawName.replace(/\b(TR|TRST|TRUST|TRUSTEE|REVOC|REVOCABLE|LIVING|UT|DATED?|U\/A|UA|DTD)\b.*$/i, '').trim();
-      cleanName = cleanName.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}.*$/, '').trim();
-      // Remove trailing commas or punctuation
-      cleanName = cleanName.replace(/[,;:\s]+$/, '').trim();
-
-      // Skip if name is too short or empty
-      if (!cleanName || cleanName.length < 3) {
-        return;
-      }
-
-      // Check if it looks like a company (has LLC, INC, CORP, etc)
-      const companyKeywords = /\b(LLC|L\.L\.C|INC|CORP|CORPORATION|LTD|LIMITED|CO|COMPANY|PROPERTIES|INVESTMENTS?|PARTNERS|LP|LLP|PLLC|PC)\b/i;
-      if (companyKeywords.test(cleanName)) {
-        return; // Skip companies for now as they're not in the error
-      }
-
-      // Try to parse as person name (LastName, FirstName format or FirstName LastName format)
-      let firstName = null;
-      let lastName = null;
-      let middleName = null;
-
-      if (cleanName.includes(',')) {
-        // Format: LAST, FIRST MIDDLE
-        const parts = cleanName.split(',').map(p => p.trim());
-        if (parts.length >= 2) {
-          lastName = parts[0];
-          const firstParts = parts[1].split(/\s+/).filter(Boolean);
-          if (firstParts.length > 0) {
-            firstName = firstParts[0];
-            if (firstParts.length > 1) {
-              middleName = firstParts.slice(1).join(' ');
-            }
-          }
-        }
-      } else {
-        // Format: FIRST MIDDLE? LAST
-        const nameParts = cleanName.split(/\s+/).filter(Boolean);
-        if (nameParts.length >= 2) {
-          firstName = nameParts[0];
-          lastName = nameParts[nameParts.length - 1];
-          if (nameParts.length > 2) {
-            middleName = nameParts.slice(1, -1).join(' ');
-          }
-        }
-      }
-
-      if (!firstName || !lastName) {
-        return; // Skip if we couldn't parse a valid name
-      }
-
-      // Format names using titleCaseName to match the required pattern
-      const formattedFirst = titleCaseName(firstName);
-      const formattedLast = titleCaseName(lastName);
-      const formattedMiddle = middleName ? titleCaseName(middleName) : null;
-
-      // Skip if formatting failed (returns null for invalid names)
-      if (!formattedFirst || !formattedLast) {
-        return;
-      }
-
-      // Create a unique key for deduplication
-      const key = `${formattedFirst}|${formattedLast}`;
-      if (!personMap.has(key)) {
-        personMap.set(key, {
-          first_name: formattedFirst,
-          last_name: formattedLast,
-          middle_name: formattedMiddle,
-          salesIndexes: [salesIndex]
-        });
-      } else {
-        // Add this sales index to existing person
-        const existing = personMap.get(key);
-        if (!existing.salesIndexes.includes(salesIndex)) {
-          existing.salesIndexes.push(salesIndex);
-        }
-        // Update middle name if we didn't have one before
-        if (!existing.middle_name && formattedMiddle) {
-          existing.middle_name = formattedMiddle;
-        }
-      }
-    });
-  });
-
-  // Create person entity files
-  const personArray = Array.from(personMap.values());
-  personArray.forEach((person, idx) => {
-    const personIdx = idx + 1;
-    const personEntity = {
-      first_name: person.first_name,
-      last_name: person.last_name,
-      middle_name: person.middle_name,
-      birth_date: null,
-      prefix_name: null,
-      suffix_name: null,
-      us_citizenship_status: null,
-      veteran_status: null,
-      request_identifier: parcel ? parcel.parcel_identifier : null
-    };
-    writeOut(`person_${personIdx}.json`, personEntity);
-
-    // Create relationships for each sales_history this person is associated with
-    person.salesIndexes.forEach((salesIdx) => {
-      const relationship = {
-        from: { "/": `./sales_history_${salesIdx}.json` },
-        to: { "/": `./person_${personIdx}.json` }
-      };
-      writeOut(`relationship_sales_history_${salesIdx}_has_person_${personIdx}.json`, relationship);
-    });
-  });
-
-  // DISABLED: Company and Mailing Address entities are not part of the Sales_History data group
+  // DISABLED: Person, Company and Mailing Address entities are not part of the Sales_History data group
   // The Sales_History data group only includes: file, property, and sales_history classes
-  // Person entities ARE generated above to support sales_history_has_person relationships
+  // No person, deed, or company entities should be generated for Sales_History data group
 }
 
 if (require.main === module) {
