@@ -3031,7 +3031,6 @@ function main() {
           file_format: null,
           ipfs_url: null,
           name: `Deed ${instrNumber}`,
-          original_url: link,
         };
         writeOut(`file_${i}.json`, file);
         const relDeedFile = {
@@ -3046,7 +3045,6 @@ function main() {
           file_format: null,
           ipfs_url: null,
           name: `Deed ${book}/${page}`,
-          original_url: link,
         };
         writeOut(`file_${i}.json`, file);
         const relDeedFile = {
