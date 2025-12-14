@@ -2596,26 +2596,6 @@ function writePersonCompaniesSalesRelationships(
   // DISABLED: Person, Company, and Mailing Address entities are not part of the Sales_History data group
   // The Sales_History data group only includes: file, property, and sales_history classes
   // Therefore, we do not generate person, company, or mailing_address entities or their relationships
-
-  // Clean up old person/company/relationship files before returning
-  const cleanupRelationshipPatterns = [
-    /^relationship_sales_person_\d+\.json$/i,
-    /^relationship_sales_company_\d+\.json$/i,
-    /^relationship_sales_history_\d+_buyer_(person|company)_\d+\.json$/i,
-    /^person_\d+\.json$/i,
-    /^company_\d+\.json$/i,
-    /^mailing_address\.json$/i,
-    /^relationship_person_has_mailing_address_\d+\.json$/i,
-    /^relationship_company_has_mailing_address_\d+\.json$/i,
-  ];
-  try {
-    fs.readdirSync("data").forEach((f) => {
-      if (cleanupRelationshipPatterns.some((re) => re.test(f))) {
-        fs.unlinkSync(path.join("data", f));
-      }
-    });
-  } catch (e) {}
-
   return;
 
   const owners = readJSON(path.join("owners", "owner_data.json"));
