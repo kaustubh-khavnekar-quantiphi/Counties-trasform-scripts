@@ -2199,6 +2199,8 @@ function writePersonCompaniesSalesRelationships(
   const prunePerson = (id) => {
     const filePath = path.join("data", `person_${id}.json`);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const mailingAddressRelPath = path.join("data", `relationship_person_${id}_has_mailing_address.json`);
+    if (fs.existsSync(mailingAddressRelPath)) fs.unlinkSync(mailingAddressRelPath);
     for (const [key, value] of personIndexByKey.entries()) {
       if (value === id) personIndexByKey.delete(key);
     }
@@ -2207,6 +2209,8 @@ function writePersonCompaniesSalesRelationships(
   const pruneCompany = (id) => {
     const filePath = path.join("data", `company_${id}.json`);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const mailingAddressRelPath = path.join("data", `relationship_company_${id}_has_mailing_address.json`);
+    if (fs.existsSync(mailingAddressRelPath)) fs.unlinkSync(mailingAddressRelPath);
     for (const [key, value] of companyIndexByName.entries()) {
       if (value === id) companyIndexByName.delete(key);
     }
