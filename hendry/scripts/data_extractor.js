@@ -2105,6 +2105,9 @@ function writePersonCompaniesSalesRelationships(
   });
 
   // Write person_has_mailing_address relationships
+  const linkedPersonIds = new Set();
+  const linkedCompanyIds = new Set();
+
   mailingAddressMap.forEach((entry) => {
     entry.persons.forEach((personIdx) => {
       writeJSON(
@@ -2114,6 +2117,8 @@ function writePersonCompaniesSalesRelationships(
           to: { "/": `./mailing_address_${entry.index}.json` }
         }
       );
+      // Mark person as linked so it doesn't get pruned
+      linkedPersonIds.add(personIdx);
     });
 
     entry.companies.forEach((companyIdx) => {
@@ -2124,11 +2129,10 @@ function writePersonCompaniesSalesRelationships(
           to: { "/": `./mailing_address_${entry.index}.json` }
         }
       );
+      // Mark company as linked so it doesn't get pruned
+      linkedCompanyIds.add(companyIdx);
     });
   });
-
-  const linkedPersonIds = new Set();
-  const linkedCompanyIds = new Set();
   // Relationships: ensure each sale links to grantee (or fallback grantor) and any recorded owners for that date
   sales.forEach((rec, idx) => {
     const saleFile = saleFiles ? saleFiles[idx] : null;
