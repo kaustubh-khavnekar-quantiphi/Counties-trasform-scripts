@@ -174,6 +174,17 @@ function titleCaseName(s) {
 function parsePerson(name) {
   let v = norm(name);
   if (!v) return null;
+
+  // Reject common placeholder/invalid names
+  const upperV = v.toUpperCase();
+  if (upperV === "NO NAME FOUND" ||
+      upperV === "NO NAME" ||
+      upperV === "NAME NOT FOUND" ||
+      upperV === "NOT FOUND" ||
+      upperV === "UNKNOWN") {
+    return null;
+  }
+
   // Handle comma separated Last, First Middle
   if (v.includes(",")) {
     const segs = v
@@ -186,11 +197,21 @@ function parsePerson(name) {
       const tokens = rest.split(/\s+/).filter(Boolean);
       const first = cleanInvalidCharsFromName(tokens.shift()) || "";
       const middle = cleanInvalidCharsFromName(tokens.join(" ")) || null;
+
+      const firstName = titleCaseName(first);
+      const lastName = titleCaseName(last);
+      const middleName = titleCaseName(middle);
+
+      // Validate that at least first and last names are valid
+      if (!firstName || !lastName) {
+        return null;
+      }
+
       return {
         type: "person",
-        first_name: titleCaseName(first) || null,
-        last_name: titleCaseName(last) || null,
-        middle_name: titleCaseName(middle) || null,
+        first_name: firstName,
+        last_name: lastName,
+        middle_name: middleName,
       };
     }
   }
@@ -200,11 +221,21 @@ function parsePerson(name) {
     const first = cleanInvalidCharsFromName(tokens.shift());
     const last = cleanInvalidCharsFromName(tokens.pop());
     const middle = cleanInvalidCharsFromName(tokens.join(" ")) || null;
+
+    const firstName = titleCaseName(first);
+    const lastName = titleCaseName(last);
+    const middleName = titleCaseName(middle);
+
+    // Validate that at least first and last names are valid
+    if (!firstName || !lastName) {
+      return null;
+    }
+
     return {
       type: "person",
-      first_name: titleCaseName(first) || null,
-      last_name: titleCaseName(last) || null,
-      middle_name: titleCaseName(middle) || null,
+      first_name: firstName,
+      last_name: lastName,
+      middle_name: middleName,
     };
   }
   return null;
