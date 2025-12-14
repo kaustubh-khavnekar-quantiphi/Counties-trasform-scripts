@@ -2329,15 +2329,16 @@ function extractAddress(overallDetails, unnorm) {
   }
   const mailingAddress = overallDetails["Mailing Address"];
   const siteAddress = overallDetails["Situs Address"];
-  if (mailingAddress) {
-    const mailingAddressObj = {
-      latitude: null,
-      longitude: null,
-      unnormalized_address: mailingAddress,
-    };
-    writeOut("mailing_address.json", mailingAddressObj);
-    hasOwnerMailingAddress = true;
-  }
+  // DISABLED: Mailing Address entities are not part of the Sales_History data group
+  // if (mailingAddress) {
+  //   const mailingAddressObj = {
+  //     latitude: null,
+  //     longitude: null,
+  //     unnormalized_address: mailingAddress,
+  //   };
+  //   writeOut("mailing_address.json", mailingAddressObj);
+  //   hasOwnerMailingAddress = true;
+  // }
   if (siteAddress) {
     const addressObj = {
       county_name,
@@ -3147,178 +3148,9 @@ function main() {
     }
   }
 
-  // Owners: from owners/owner_data.json (create none if unavailable/empty)
-  if (ownersData) {
-    // Determine current owners for this parcel
-    const key =
-      parcel && parcel.parcel_identifier
-        ? `property_${parcel.parcel_identifier}`
-        : null;
-    const ownersKey = ownersData[key] ? key : "property_unknown_id";
-    const ownersByDate =
-      ownersData[ownersKey] && ownersData[ownersKey].owners_by_date
-        ? ownersData[ownersKey].owners_by_date || []
-        : [];
-    if (ownersByDate) {
-      // Relationships: link sale to owners present on that date (both persons and companies)
-        let relPersonCounter = 0;
-        let relCompanyCounter = 0;
-        const personMap = new Map();
-        // Only collect persons from dates that have sales records or current owners
-        const relevantDates = new Set([...Object.keys(salesOwnerMapping), 'current']);
-        Object.entries(ownersByDate).forEach(([date, arr]) => {
-          // Include persons only if they're from a sale date or current owners
-          if (!relevantDates.has(date)) return;
-          (arr || []).forEach((o) => {
-            if (o.type === "person") {
-              const k = `${(o.first_name || "").trim().toUpperCase()}|${(o.last_name || "").trim().toUpperCase()}`;
-              if (!personMap.has(k))
-                personMap.set(k, {
-                  first_name: o.first_name,
-                  middle_name: o.middle_name,
-                  last_name: o.last_name,
-                });
-              else {
-                const existing = personMap.get(k);
-                if (!existing.middle_name && o.middle_name)
-                  existing.middle_name = o.middle_name;
-              }
-            }
-          });
-        });
-        people = Array.from(personMap.values())
-          .map((p) => ({
-            first_name: p.first_name ? titleCaseName(p.first_name) : null,
-            middle_name: p.middle_name ? titleCaseName(p.middle_name) : null,
-            last_name: p.last_name ? titleCaseName(p.last_name) : null,
-            birth_date: null,
-            prefix_name: null,
-            suffix_name: null,
-            us_citizenship_status: null,
-            veteran_status: null,
-            request_identifier: parcel.parcel_identifier,
-          }))
-          .filter((p) => {
-            // Only include persons with valid first and last names that match the schema pattern
-            if (!p.first_name || !p.last_name) return false;
-            if (!isValidPersonName(p.first_name) || !isValidPersonName(p.last_name)) return false;
-            // Middle name is optional, but if present, must be valid
-            if (p.middle_name && !isValidPersonName(p.middle_name)) return false;
-            return true;
-          });
-        people.forEach((p, idx) => {
-
-        });
-        let loopIdx = 1;
-        for (const p of people) {
-          writeOut(`person_${loopIdx++}.json`, p);
-        }
-        const companyNames = new Set();
-        // Only collect companies from dates that have sales records or current owners
-        Object.entries(ownersByDate).forEach(([date, arr]) => {
-          // Include companies only if they're from a sale date or current owners
-          if (!relevantDates.has(date)) return;
-          (arr || []).forEach((o) => {
-            if (o.type === "company" && (o.name || "").trim())
-              companyNames.add((o.name || "").trim().toUpperCase());
-          });
-        });
-        companies = Array.from(companyNames).map((n) => ({
-          name: n,
-          request_identifier: parcel.parcel_identifier,
-        }));
-        loopIdx = 1;
-        for (const c of companies) {
-          writeOut(`company_${loopIdx++}.json`, c);
-        }
-
-        // Track which person and company indices are actually used in relationships
-        const usedPersonIdx = new Set();
-        const usedCompanyIdx = new Set();
-
-        for (const [date, mapping] of Object.entries(salesOwnerMapping)) {
-          const salesIdx = mapping.salesIndex;
-          const ownersOnDate = ownersByDate[date] || [];
-          ownersOnDate
-            .filter((o) => o.type === "person")
-            .forEach((o) => {
-              const pIdx = findPersonIndexByName(o.first_name, o.last_name);
-              if (pIdx) {
-                usedPersonIdx.add(pIdx);
-                relPersonCounter++;
-                writeJSON(
-                  path.join(
-                    "data",
-                    `relationship_sales_history_has_person_${relPersonCounter}.json`,
-                  ),
-                  {
-                    to: { "/": `./person_${pIdx}.json` },
-                    from: { "/": `./sales_history_${salesIdx}.json` },
-                  },
-                );
-              }
-            });
-          ownersOnDate
-            .filter((o) => o.type === "company")
-            .forEach((o) => {
-              const cIdx = findCompanyIndexByName(o.name);
-              if (cIdx) {
-                usedCompanyIdx.add(cIdx);
-                relCompanyCounter++;
-                writeJSON(
-                  path.join(
-                    "data",
-                    `relationship_sales_history_has_company_${relCompanyCounter}.json`,
-                  ),
-                  {
-                    to: { "/": `./company_${cIdx}.json` },
-                    from: { "/": `./sales_history_${salesIdx}.json` },
-                  },
-                );
-              }
-            });
-        };
-        if (hasOwnerMailingAddress) {
-          relPersonCounter = 0;
-          relCompanyCounter = 0;
-          // Link all created persons to mailing address (they are all current owners)
-          people.forEach((p, idx) => {
-            const pIdx = idx + 1;
-            usedPersonIdx.add(pIdx);
-            relPersonCounter++;
-            writeJSON(
-              path.join(
-                "data",
-                `relationship_person_has_mailing_address_${relPersonCounter}.json`,
-              ),
-              {
-                from: { "/": `./person_${pIdx}.json` },
-                to: { "/": `./mailing_address.json` },
-              },
-            );
-          });
-          // Link all created companies to mailing address (they are all current owners)
-          companies.forEach((c, idx) => {
-            const cIdx = idx + 1;
-            usedCompanyIdx.add(cIdx);
-            relCompanyCounter++;
-            writeJSON(
-              path.join(
-                "data",
-                `relationship_company_has_mailing_address_${relCompanyCounter}.json`,
-              ),
-              {
-                from: { "/": `./company_${cIdx}.json` },
-                to: { "/": `./mailing_address.json` },
-              },
-            );
-          });
-        }
-
-        // Remove person and company files that weren't referenced by any relationship
-        removeUnusedOwnerFiles(usedPersonIdx, usedCompanyIdx);
-    }
-  }
+  // DISABLED: Person, Company, and Mailing Address entities are not part of the Sales_History data group
+  // The Sales_History data group only includes: file, property, and sales_history classes
+  // Therefore, we do not generate person, company, or mailing_address entities or their relationships
 }
 
 if (require.main === module) {
