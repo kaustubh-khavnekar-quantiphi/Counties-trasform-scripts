@@ -2947,29 +2947,37 @@ function main() {
   let salesOwnerMapping = {};
 
   // Cleanup old sales files (both sales_*.json and sales_history_*.json patterns)
-  // Also cleanup deed and person files which should not be in Sales_History data group
+  // Also cleanup deed, person, and company files which should not be in Sales_History data group
+  // NOTE: Person and company entities are NOT part of the Sales_History data group.
+  // This cleanup ensures no orphaned entity files remain from previous runs.
   try {
-    fs.readdirSync("data").forEach((f) => {
-      if (
-        /^sales_history_\d+\.json$/.test(f) ||
-        /^sales_\d+\.json$/.test(f) ||
-        /^deed_\d+\.json$/.test(f) ||
-        /^person_\d+\.json$/.test(f) ||
-        /^file_\d+\.json$/.test(f) ||
-        /^relationship_deed_file_\d+\.json$/.test(f) ||
-        /^relationship_deed_\d+_has_file_\d+\.json$/.test(f) ||
-        /^relationship_sales_deed_\d+\.json$/.test(f) ||
-        /^relationship_sales_history_deed_\d+\.json$/.test(f) ||
-        /^relationship_sales_history_has_deed_\d+\.json$/.test(f) ||
-        /^relationship_sales_history_\d+_has_file_\d+\.json$/.test(f) ||
-        /^relationship_sales_history_\d+_has_person_\d+\.json$/.test(f) ||
-        /^relationship_property_has_sales_history_\d+\.json$/.test(f) ||
-        /^relationship_.*_sales_history_.*\.json$/.test(f)
-      ) {
-        fs.unlinkSync(path.join("data", f));
-      }
-    });
-  } catch (e) {}
+    if (fs.existsSync("data")) {
+      fs.readdirSync("data").forEach((f) => {
+        if (
+          /^sales_history_\d+\.json$/.test(f) ||
+          /^sales_\d+\.json$/.test(f) ||
+          /^deed_\d+\.json$/.test(f) ||
+          /^person_\d+\.json$/.test(f) ||
+          /^company_\d+\.json$/.test(f) ||
+          /^file_\d+\.json$/.test(f) ||
+          /^relationship_deed_file_\d+\.json$/.test(f) ||
+          /^relationship_deed_\d+_has_file_\d+\.json$/.test(f) ||
+          /^relationship_sales_deed_\d+\.json$/.test(f) ||
+          /^relationship_sales_history_deed_\d+\.json$/.test(f) ||
+          /^relationship_sales_history_has_deed_\d+\.json$/.test(f) ||
+          /^relationship_sales_history_\d+_has_file_\d+\.json$/.test(f) ||
+          /^relationship_sales_history_\d+_has_person_\d+\.json$/.test(f) ||
+          /^relationship_sales_history_\d+_has_company_\d+\.json$/.test(f) ||
+          /^relationship_property_has_sales_history_\d+\.json$/.test(f) ||
+          /^relationship_.*_sales_history_.*\.json$/.test(f)
+        ) {
+          fs.unlinkSync(path.join("data", f));
+        }
+      });
+    }
+  } catch (e) {
+    // Silently ignore cleanup errors - data directory may not exist yet
+  }
 
   if (sales && Array.isArray(sales.rows) && sales.rows.length > 0) {
     // If rows exist, create sales_history_*.json files
