@@ -1515,7 +1515,7 @@ const VALID_SPACE_TYPES = new Set([
   "Enclosed Porch", "Attic", "Enclosed Cabana", "Attached Carport", "Detached Carport",
   "Detached Utility Closet", "Jacuzzi", "Courtyard", "Open Courtyard", "Screen Porch (1-Story)",
   "Screen Enclosure (2-Story)", "Screen Enclosure (3-Story)", "Screen Enclosure (Custom)",
-  "Lower Garage", "Lower Screened Porch", "Stoop", "First Floor", "Second Floor", "Third Floor", "Fourth Floor",
+  "Lower Garage", "Lower Screened Porch", "Stoop",
   "Floor", "Basement", "Sub-Basement", "Living Area", "Barn"
 ]);
 
