@@ -2945,8 +2945,29 @@ function main() {
   const sales = input && input.Sales && input.Sales.response;
   const salesReq = input && input.Sales && input.Sales.source_http_request;
   let salesOwnerMapping = {};
+
+  // Cleanup old sales files (both sales_*.json and sales_history_*.json patterns)
+  try {
+    fs.readdirSync("data").forEach((f) => {
+      if (
+        /^sales_history_\d+\.json$/.test(f) ||
+        /^sales_\d+\.json$/.test(f) ||
+        /^deed_\d+\.json$/.test(f) ||
+        /^file_\d+\.json$/.test(f) ||
+        /^relationship_deed_file_\d+\.json$/.test(f) ||
+        /^relationship_sales_deed_\d+\.json$/.test(f) ||
+        /^relationship_sales_history_deed_\d+\.json$/.test(f) ||
+        /^relationship_sales_history_has_deed_\d+\.json$/.test(f) ||
+        /^relationship_property_has_sales_history_\d+\.json$/.test(f) ||
+        /^relationship_.*_sales_history_.*\.json$/.test(f)
+      ) {
+        fs.unlinkSync(path.join("data", f));
+      }
+    });
+  } catch (e) {}
+
   if (sales && Array.isArray(sales.rows) && sales.rows.length > 0) {
-    // If rows exist, create sales_*.json and include source_http_request (sales schema supports additionalProperties? Not specified, but instruction requires including it)
+    // If rows exist, create sales_history_*.json files
     const cols = sales.cols || [];
     const dateIdx = cols.findIndex((c) => /sale(\s)*date/i.test(c.title));
     const priceIdx = cols.findIndex((c) => /sale(\s)*price/i.test(c.title));
