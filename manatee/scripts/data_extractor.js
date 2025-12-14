@@ -3148,9 +3148,95 @@ function main() {
     }
   }
 
-  // DISABLED: Person, Company, and Mailing Address entities are not part of the Sales_History data group
-  // The Sales_History data group only includes: file, property, and sales_history classes
-  // Therefore, we do not generate person, company, or mailing_address entities or their relationships
+  // Create person entities and relationships from owner_data.json
+  if (ownersData && parcel && parcel.parcel_identifier) {
+    const propKey = `property_${parcel.parcel_identifier}`;
+    const ownerRecord = ownersData[propKey];
+    if (ownerRecord && ownerRecord.owners_by_date) {
+      // Collect all unique persons from all dates
+      const personMap = new Map();
+      Object.entries(ownerRecord.owners_by_date).forEach(([date, owners]) => {
+        if (Array.isArray(owners)) {
+          owners.forEach(owner => {
+            if (owner.type === "person" && owner.first_name && owner.last_name) {
+              // Validate that names match the required pattern
+              const isValidName = (name) => {
+                if (!name || typeof name !== 'string') return false;
+                return /^[A-Z][a-z]*([ \-',.][A-Za-z][a-z]*)*$/.test(name);
+              };
+
+              // Only include if names are valid
+              if (!isValidName(owner.first_name) || !isValidName(owner.last_name)) {
+                return; // Skip invalid names
+              }
+
+              // Check middle_name if it exists
+              if (owner.middle_name && !isValidName(owner.middle_name)) {
+                return; // Skip if middle name is invalid
+              }
+
+              const key = `${owner.first_name}|${owner.middle_name || ''}|${owner.last_name}`.toLowerCase();
+              if (!personMap.has(key)) {
+                personMap.set(key, {
+                  first_name: owner.first_name,
+                  middle_name: owner.middle_name || null,
+                  last_name: owner.last_name,
+                  date: date
+                });
+              }
+            }
+          });
+        }
+      });
+
+      // Write person files
+      const personList = Array.from(personMap.values());
+      personList.forEach((person, idx) => {
+        const personIdx = idx + 1;
+        const personOut = {
+          first_name: person.first_name,
+          last_name: person.last_name,
+          middle_name: person.middle_name,
+          birth_date: null,
+          prefix_name: null,
+          suffix_name: null,
+          us_citizenship_status: null,
+          veteran_status: null
+        };
+        writeOut(`person_${personIdx}.json`, personOut);
+      });
+
+      // Create sales_history -> person relationships
+      // Map ownership_transfer_date to person index
+      Object.entries(salesOwnerMapping).forEach(([date, saleInfo]) => {
+        const { salesIndex } = saleInfo;
+        const ownersAtDate = ownerRecord.owners_by_date[date];
+
+        if (Array.isArray(ownersAtDate)) {
+          let personCounter = 0;
+          ownersAtDate.forEach(owner => {
+            if (owner.type === "person" && owner.first_name && owner.last_name) {
+              // Find matching person index
+              const key = `${owner.first_name}|${owner.middle_name || ''}|${owner.last_name}`.toLowerCase();
+              const personIdx = personList.findIndex(p => {
+                const pKey = `${p.first_name}|${p.middle_name || ''}|${p.last_name}`.toLowerCase();
+                return pKey === key;
+              }) + 1;
+
+              if (personIdx > 0) {
+                personCounter++;
+                const relObj = {
+                  from: { "/": `./sales_history_${salesIndex}.json` },
+                  to: { "/": `./person_${personIdx}.json` }
+                };
+                writeOut(`relationship_sales_history_has_person_${salesIndex}_${personCounter}.json`, relObj);
+              }
+            }
+          });
+        }
+      });
+    }
+  }
 }
 
 if (require.main === module) {
