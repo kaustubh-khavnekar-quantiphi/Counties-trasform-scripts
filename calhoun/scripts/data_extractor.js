@@ -2069,7 +2069,53 @@ function mapExtraFeatures(features) {
       utilities.push(mapped);
     }
   });
-  return { layouts, structures, utilities };
+
+  // Deduplicate structures based on their actual content to avoid creating identical structure files
+  const uniqueStructures = [];
+  const structureSignatures = new Set();
+  structures.forEach((struct) => {
+    const signature = JSON.stringify({
+      exterior_wall_material_primary: struct.exterior_wall_material_primary,
+      finished_base_area: struct.finished_base_area,
+    });
+    if (!structureSignatures.has(signature)) {
+      structureSignatures.add(signature);
+      uniqueStructures.push(struct);
+    }
+  });
+
+  // Deduplicate layouts based on their actual content
+  const uniqueLayouts = [];
+  const layoutSignatures = new Set();
+  layouts.forEach((layout) => {
+    const signature = JSON.stringify({
+      space_type: layout.space_type,
+      built_year: layout.built_year,
+      size_square_feet: layout.size_square_feet,
+      is_exterior: layout.is_exterior,
+      is_finished: layout.is_finished,
+    });
+    if (!layoutSignatures.has(signature)) {
+      layoutSignatures.add(signature);
+      uniqueLayouts.push(layout);
+    }
+  });
+
+  // Deduplicate utilities based on their actual content
+  const uniqueUtilities = [];
+  const utilitySignatures = new Set();
+  utilities.forEach((utility) => {
+    const signature = JSON.stringify({
+      water_source_type: utility.water_source_type,
+      sewer_type: utility.sewer_type,
+    });
+    if (!utilitySignatures.has(signature)) {
+      utilitySignatures.add(signature);
+      uniqueUtilities.push(utility);
+    }
+  });
+
+  return { layouts: uniqueLayouts, structures: uniqueStructures, utilities: uniqueUtilities };
 }
 
 function createDefaultStructureRecord(parcelId) {
@@ -2216,6 +2262,11 @@ function writeExtraLayouts(parcelId, extraLayouts, startLayoutIndex, startSpaceI
 function writeExtraStructures(parcelId, extraStructures, startStructureIndex, primaryLayoutFileName) {
   let structureIndex = startStructureIndex;
   extraStructures.forEach((info) => {
+    // Skip structures with no meaningful data (no area)
+    // A structure needs either an area measurement or it's not worth generating
+    if (info.finished_base_area == null || info.finished_base_area === 0) {
+      return;
+    }
     const record = createDefaultStructureRecord(parcelId);
     if (info.exterior_wall_material_primary) {
       record.exterior_wall_material_primary = info.exterior_wall_material_primary;
