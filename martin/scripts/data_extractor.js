@@ -468,6 +468,22 @@ function ensureDir(p) {
 function writeJson(p, obj) {
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf8");
+  try {
+    const relToData = path.relative("data", p);
+    if (
+      relToData &&
+      !relToData.startsWith("..") &&
+      !path.isAbsolute(relToData)
+    ) {
+      const parts = relToData.split(path.sep).filter(Boolean);
+      const fileName = parts[parts.length - 1] || null;
+      if (fileName && !fileName.startsWith("relationship_")) {
+        WRITTEN_DATA_FILES.add(fileName);
+      }
+    }
+  } catch (trackErr) {
+    // Ignore tracking issues; they do not block primary execution.
+  }
 }
 
 function toISODate(mdY) {
@@ -556,6 +572,26 @@ function isCompanyName(raw) {
   const normalized = normalizePartyName(raw).toUpperCase();
   if (!normalized) return false;
   return COMPANY_HINTS.some((hint) => normalized.includes(hint.trim().toUpperCase()));
+}
+
+const PERSON_FRAGMENT_BLOCKLIST = new Set([
+  "sons",
+  "heirs",
+  "estate",
+  "est",
+  "trust",
+  "trustee",
+  "associates",
+]);
+
+function splitPartySegments(raw) {
+  const cleaned = normalizePartyName(raw);
+  if (!cleaned) return [];
+  const parts = cleaned
+    .split(/\s*&\s*|\s+AND\s+|\s*\+\s*|;/i)
+    .map((p) => normalizePartyName(p))
+    .filter(Boolean);
+  return parts.length ? parts : [cleaned];
 }
 
 function parsePersonNameComponents(raw) {
