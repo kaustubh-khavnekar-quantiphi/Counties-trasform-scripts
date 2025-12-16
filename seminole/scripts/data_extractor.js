@@ -3290,11 +3290,13 @@ function main() {
         if (owner.type === "person") {
           personIndex += 1;
           const personFileName = `person_${personIndex}.json`;
+          const middleNameRaw = properCaseName(owner.middle_name || null);
+          const middleNameValid = middleNameRaw && isValidName(middleNameRaw) ? middleNameRaw : null;
           const personRecord = {
             birth_date: null,
             first_name: properCaseName(owner.first_name || null),
             last_name: properCaseName(owner.last_name || null),
-            middle_name: owner.middle_name || null,
+            middle_name: middleNameValid,
             prefix_name: null,
             suffix_name: owner.suffix_name || null,
             us_citizenship_status: null,
