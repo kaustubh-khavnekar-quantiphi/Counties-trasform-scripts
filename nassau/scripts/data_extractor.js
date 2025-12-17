@@ -1532,21 +1532,47 @@ function formatMiddleName(name) {
 
   if (!cleaned || cleaned.length === 0) return null;
 
+  // Remove leading special characters to ensure it starts with a letter
+  const startsWithLetter = cleaned.replace(/^[\s\-',.]+/, "");
+
+  if (!startsWithLetter || startsWithLetter.length === 0) return null;
+
   // Normalize spacing: collapse multiple spaces into one
-  const normalizedSpacing = cleaned.replace(/\s+/g, " ").trim();
+  const normalizedSpacing = startsWithLetter.replace(/\s+/g, " ").trim();
 
   if (!normalizedSpacing) return null;
 
-  // Capitalize the first letter, keep the rest as-is (middle names allow any case)
-  const result = normalizedSpacing.charAt(0).toUpperCase() + normalizedSpacing.slice(1);
+  // Title case each word: capitalize first LETTER of each word, lowercase the rest
+  // This ensures multi-word middle names like "MARY WELLS" become "Mary Wells"
+  // and single-word names like "WELLS" become "Wells"
+  const result = normalizedSpacing
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => {
+      // Find the first letter in the word
+      const firstLetterIndex = word.search(/[a-z]/);
+      if (firstLetterIndex === -1) return ""; // No letters found, skip this word
+
+      // Skip any leading special characters and capitalize first letter
+      // This ensures the word starts with a letter, not a special character
+      const letterPart = word.substring(firstLetterIndex);
+      return letterPart.charAt(0).toUpperCase() + letterPart.slice(1);
+    })
+    .filter(Boolean) // Remove empty strings from array
+    .join(" ");
+
+  // Remove any trailing special characters that might have been left
+  const finalResult = result.replace(/[\s\-',.]+$/, "").trim();
+
+  if (!finalResult || finalResult.length === 0) return null;
 
   // Validate against the middle name pattern
-  if (!MIDDLE_NAME_PATTERN.test(result)) {
-    console.log(`Warning: formatMiddleName produced invalid result: "${result}" from input: "${name}"`);
+  if (!MIDDLE_NAME_PATTERN.test(finalResult)) {
+    console.log(`Warning: formatMiddleName produced invalid result: "${finalResult}" from input: "${name}"`);
     return null;
   }
 
-  return result;
+  return finalResult;
 }
 
 function formatName(name) {
@@ -1668,6 +1694,16 @@ function parsePerson(name) {
     middleName = tokens.length > 2 ? tokens.slice(1, -1).join(" ") : null;
   }
 
+  // Reject if first or last name is a single letter - these are likely initials or parsing errors
+  if (firstName && firstName.length === 1) {
+    console.log(`Warning: Rejecting name with single-letter firstName: '${name}' (parsed as firstName: '${firstName}')`);
+    return { firstName: null, lastName: null, middleName: null, prefix, suffix };
+  }
+  if (lastName && lastName.length === 1) {
+    console.log(`Warning: Rejecting name with single-letter lastName: '${name}' (parsed as lastName: '${lastName}')`);
+    return { firstName: null, lastName: null, middleName: null, prefix, suffix };
+  }
+
   return { firstName, lastName, middleName, prefix, suffix };
 }
 
@@ -1694,6 +1730,7 @@ function extractOwnerInfo(ownershipHtml) {
       // Remove legal designations that are not part of the person's name
       // L/E = Life Estate, JT/RS = Joint Tenants with Right of Survivorship, etc.
       cleanName = cleanName
+        .replace(/\s*\([^)]*\)\s*/g, ' ') // Remove parenthetical content like (GUARDIAN), (TRUSTEE), (AGENT), etc.
         .replace(/\s+L\/E\s*$/i, '') // Remove Life Estate at end
         .replace(/\s+JT\/RS\s*$/i, '') // Remove Joint Tenants with Right of Survivorship
         .replace(/\s+JTWROS\s*$/i, '') // Remove Joint Tenants with Right of Survivorship
@@ -1704,10 +1741,19 @@ function extractOwnerInfo(ownershipHtml) {
         .replace(/\s+TTEE\s*$/i, '') // Remove Trustee abbreviation
         .replace(/\s+AS\s+TRUSTEE.*$/i, '') // Remove "AS TRUSTEE" and anything after
         .replace(/\s+CUSTODIAN.*$/i, '') // Remove "CUSTODIAN" and anything after
+        .replace(/\s+/g, ' ') // Normalize multiple spaces to single space
         .trim();
 
-      // Split by & to handle multiple owners on same line
-      const namesParts = cleanName.split(/\s*&\s*/);
+      // Check if the original cleanName contains company keywords before splitting
+      // This prevents splitting company names like "E3 LAND & MINERALS LLC" into person names
+      let namesParts;
+      if (companyIndicators.test(cleanName)) {
+        // If the original string is a company, don't split it
+        namesParts = [cleanName];
+      } else {
+        // Split by & to handle multiple owners on same line
+        namesParts = cleanName.split(/\s*&\s*/);
+      }
 
       for (const namePart of namesParts) {
         const trimmedName = namePart.trim();
@@ -1730,7 +1776,8 @@ function checkOwnerInfoVsCurrentOwners(ownerInfo, ownersByDateCurrent) {
   function titleCase(str) {
     return (str || "")
       .toLowerCase()
-      .replace(/\b([a-z])(\w*)/g, (m, a, b) => a.toUpperCase() + b);
+      .replace(/\b([a-z])(\w*)/g, (m, a, b) => a.toUpperCase() + b)
+      .trim();
   }
   
   function buildPersonFromOwnerMapping(first, last, middle) {
@@ -2372,7 +2419,11 @@ function main() {
       }
 
       // Only create person if we have valid first and last names
-      if (firstName && lastName) {
+      // Additional check: ensure names are not single letters (likely initials or parsing errors)
+      // CRITICAL: first_name and last_name MUST be non-null strings (schema requires type: "string", not ["string", "null"])
+      if (firstName && lastName &&
+          typeof firstName === 'string' && typeof lastName === 'string' &&
+          firstName.length > 1 && lastName.length > 1) {
         const person = {
           source_http_request: {
             method: "GET",
@@ -2393,51 +2444,65 @@ function main() {
         writeJSON(path.join("data", personFileName), person);
         initialPersonFiles.push(personFileName);
       } else {
-        console.log(`Warning: Skipping person with invalid name: ${owner.name} (firstName: ${firstName}, lastName: ${lastName})`);
+        console.log(`Warning: Skipping person with invalid name: ${owner.name} (firstName: ${firstName}, lastName: ${lastName}, firstName.length: ${firstName ? firstName.length : 'N/A'}, lastName.length: ${lastName ? lastName.length : 'N/A'})`);
       }
     }
   });
   
-  const mailingAddress = {
-    source_http_request: {
-      method: "GET",
-      url: seed.source_http_request.url
-    },
-    request_identifier: parcelIdentifier || seed.parcel_id || "",
-    // county_name: null,
-    unnormalized_address: mailingAddr,
-    longitude: null,
-    latitude: null
-  };
-  writeJSON(path.join("data", "mailing_address.json"), mailingAddress);
-  
   // Track if relationships were created for initial owners
   let initialRelationshipsCreated = false;
-  
-  // Create relationships between owners and mailing address
-  if (personCounter > 0 || companyCounter > 0) {
-    initialRelationshipsCreated = true;
-    
-    for (let i = 1; i <= personCounter; i++) {
-      const rel = {
-        from: { "/": `./person_${i}.json` },
-        to: { "/": `./mailing_address.json` },
-      };
-      writeJSON(
-        path.join("data", `relationship_person_${i}_has_mailing_address.json`),
-        rel,
-      );
-    }
-    
-    for (let i = 1; i <= companyCounter; i++) {
-      const rel = {
-        from: { "/": `./company_${i}.json` },
-        to: { "/": `./mailing_address.json` },
-      };
-      writeJSON(
-        path.join("data", `relationship_company_${i}_has_mailing_address.json`),
-        rel,
-      );
+
+  // Only create mailing_address.json if there are owners to reference it
+  // Check if we have initial owners OR if we might have current owners from ownersData later
+  const hasInitialOwners = personCounter > 0 || companyCounter > 0;
+  let hasCurrentOwners = false;
+  if (ownersData && parcelIdentifier) {
+    const propertyKey = `property_${parcelIdentifier}`;
+    const ownersByDate = ownersData[propertyKey]?.owners_by_date || {};
+    const currentOwners = ownersByDate["current"] || [];
+    hasCurrentOwners = currentOwners.length > 0;
+  }
+
+  // Only create mailing address and relationships if there are owners
+  if (hasInitialOwners || hasCurrentOwners) {
+    const mailingAddress = {
+      source_http_request: {
+        method: "GET",
+        url: seed.source_http_request.url
+      },
+      request_identifier: parcelIdentifier || seed.parcel_id || "",
+      // county_name: null,
+      unnormalized_address: mailingAddr,
+      longitude: null,
+      latitude: null
+    };
+    writeJSON(path.join("data", "mailing_address.json"), mailingAddress);
+
+    // Create relationships between owners and mailing address
+    if (personCounter > 0 || companyCounter > 0) {
+      initialRelationshipsCreated = true;
+
+      for (let i = 1; i <= personCounter; i++) {
+        const rel = {
+          from: { "/": `./person_${i}.json` },
+          to: { "/": `./mailing_address.json` },
+        };
+        writeJSON(
+          path.join("data", `relationship_person_${i}_has_mailing_address.json`),
+          rel,
+        );
+      }
+
+      for (let i = 1; i <= companyCounter; i++) {
+        const rel = {
+          from: { "/": `./company_${i}.json` },
+          to: { "/": `./mailing_address.json` },
+        };
+        writeJSON(
+          path.join("data", `relationship_company_${i}_has_mailing_address.json`),
+          rel,
+        );
+      }
     }
   }
   
@@ -2637,9 +2702,15 @@ function main() {
     const deedFileName = `deed_${deedIndex}.json`;
     writeJSON(path.join("data", deedFileName), deedObj);
 
+    // Ensure name is never empty - use default if both parts are empty
+    let fileName = (instAbbr ? instAbbr + " " : "") + (bookPage || "");
+    if (!fileName || fileName.trim() === "") {
+      fileName = "Document";
+    }
+
     const fileObj = {
       file_format: null,
-      name: (instAbbr ? instAbbr + " " : "") + (bookPage || ""),
+      name: fileName,
       original_url: deedUrl,
       ipfs_url: null,
       document_type: mapDocumentType(deedType),
@@ -2697,8 +2768,12 @@ function main() {
         }
 
         // Only create person if we have valid first and last names
-        if (!firstName || !lastName) {
-          console.log(`Warning: Cannot create person with invalid name - firstName: ${firstName}, lastName: ${lastName}`);
+        // Additional check: ensure names are not single letters (likely initials or parsing errors)
+        // CRITICAL: first_name and last_name MUST be non-null strings (schema requires type: "string", not ["string", "null"])
+        if (!firstName || !lastName ||
+            typeof firstName !== 'string' || typeof lastName !== 'string' ||
+            firstName.length <= 1 || lastName.length <= 1) {
+          console.log(`Warning: Cannot create person with invalid name - firstName: ${firstName}, lastName: ${lastName}, firstName.length: ${firstName ? firstName.length : 'N/A'}, lastName.length: ${lastName ? lastName.length : 'N/A'}, originalName: ${owner.first_name || 'N/A'} ${owner.last_name || 'N/A'}`);
           return null;
         }
 
