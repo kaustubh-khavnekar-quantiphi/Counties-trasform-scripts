@@ -1022,7 +1022,7 @@ function findSectionByTitle($, title) {
 
 function mapPermitImprovementType(typeText) {
   const txt = (typeText || "").toUpperCase();
-  if (!txt) return null;
+  if (!txt) return "GeneralBuilding";
   if (txt.includes("ROOF")) return "Roofing";
   if (txt.includes("POOL") || txt.includes("SPA")) return "PoolSpaInstallation";
   if (txt.includes("SCREEN")) return "ScreenEnclosure";
@@ -1033,7 +1033,7 @@ function mapPermitImprovementType(typeText) {
   if (txt.includes("WINDOW") || txt.includes("DOOR") || txt.includes("OPENING")) {
     return "ExteriorOpeningsAndFinishes";
   }
-  if (txt.includes("HVAC") || txt.includes("A/C") || txt.includes("AIR")) {
+  if (txt.includes("HVAC") || txt.includes("A/C") || txt.includes("AIR") || txt.includes("MECH")) {
     return "MechanicalHVAC";
   }
   if (txt.includes("ELECTR")) return "Electrical";
@@ -1049,6 +1049,7 @@ function mapPermitImprovementType(typeText) {
   if (txt.includes("WELL")) return "WellPermit";
   if (txt.includes("SITE") || txt.includes("DEV")) return "SiteDevelopment";
   if (txt.includes("GENERAL") || txt.includes("BUILD")) return "GeneralBuilding";
+  // Return GeneralBuilding as a safe default for any unrecognized permit types
   return "GeneralBuilding";
 }
 
@@ -1815,7 +1816,6 @@ function main() {
       contractor_type: contractorType || "Unknown",
       permit_required: permitNumber ? true : null,
       request_identifier: improvementRequestId,
-      source_http_request: clone(defaultSourceHttpRequest),
     };
 
     const cleanedImprovement = {};
@@ -2337,6 +2337,7 @@ function main() {
     });
   }
 
+  // Property to property_improvement relationships
   propertyImprovementOutputs.forEach(({ path }) => {
     writeRelationshipUnique(propertyPath, path);
   });
