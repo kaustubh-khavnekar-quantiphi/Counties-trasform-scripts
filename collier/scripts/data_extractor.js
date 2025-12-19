@@ -1090,7 +1090,7 @@ function main() {
   const utilsEntry = utils[ownerKey];
   if (utilsEntry) {
     fs.writeFileSync(
-      path.join(dataDir, "utility.json"),
+      path.join(dataDir, "utility_1.json"),
       JSON.stringify(utilsEntry, null, 2),
     );
 
@@ -1401,19 +1401,69 @@ function main() {
 
   // Always write structure.json with all required fields
   fs.writeFileSync(
-    path.join(dataDir, "structure.json"),
+    path.join(dataDir, "structure_1.json"),
     JSON.stringify(structureObj, null, 2),
   );
 
-  // Create relationship from first layout to structure (if layout exists)
-  if (firstLayoutIndex !== null) {
+  // Create relationship from layout_1 to structure_1 (if layout_1 exists), otherwise from property
+  if (layoutIdx > 1) {
+    // layoutIdx was incremented after creating layout_1, so if it's > 1, layout_1 exists
     fs.writeFileSync(
-      path.join(dataDir, `relationship_layout_${firstLayoutIndex}_to_structure.json`),
-      JSON.stringify({
-        from: { "/": `./layout_${firstLayoutIndex}.json` },
-        to: { "/": "./structure.json" }
-      }, null, 2),
+      path.join(dataDir, "relationship_layout_1_has_structure_1.json"),
+      JSON.stringify(
+        {
+          from: { "/": "./layout_1.json" },
+          to: { "/": "./structure_1.json" },
+        },
+        null,
+        2,
+      ),
     );
+
+    // Also create relationship from layout_1 to utility_1 (if utility exists)
+    const utility1Path = path.join(dataDir, "utility_1.json");
+    if (fs.existsSync(utility1Path)) {
+      fs.writeFileSync(
+        path.join(dataDir, "relationship_layout_1_has_utility_1.json"),
+        JSON.stringify(
+          {
+            from: { "/": "./layout_1.json" },
+            to: { "/": "./utility_1.json" },
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  } else {
+    // No layouts exist, connect structure directly to property
+    fs.writeFileSync(
+      path.join(dataDir, "relationship_property_has_structure_1.json"),
+      JSON.stringify(
+        {
+          from: { "/": "./property.json" },
+          to: { "/": "./structure_1.json" },
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Also connect utility directly to property if it exists
+    const utility1Path = path.join(dataDir, "utility_1.json");
+    if (fs.existsSync(utility1Path)) {
+      fs.writeFileSync(
+        path.join(dataDir, "relationship_property_has_utility_1.json"),
+        JSON.stringify(
+          {
+            from: { "/": "./property.json" },
+            to: { "/": "./utility_1.json" },
+          },
+          null,
+          2,
+        ),
+      );
+    }
   }
 
   // Tax from Summary and History
