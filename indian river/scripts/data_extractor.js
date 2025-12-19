@@ -1901,6 +1901,16 @@ function writeLayout(
   const key = `property_${parcelId}`;
   const entry = layoutsData[key];
   if (!entry || !Array.isArray(entry.layouts) || !entry.layouts.length) return;
+  if (propertyType === "LandParcel") {
+    const hasBuildingLayout = entry.layouts.some(
+      (lay) =>
+        typeof lay === "object" &&
+        lay &&
+        typeof lay.space_type === "string" &&
+        lay.space_type.toLowerCase() === "building",
+    );
+    if (!hasBuildingLayout) return;
+  }
 
   const layoutOutputs = entry.layouts.map((lay, idx) => {
     const index = idx + 1;
