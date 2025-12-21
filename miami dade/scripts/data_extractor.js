@@ -1,11 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const cheerio = require("cheerio");
+// 0000 REFERENCE FOLIO
 const propertyTypeMapping  = [
   {
     "property_usecode": "0000 - REFERENCE FOLIO",
     "ownership_estate_type": null,
-    "build_status": null,
+    "build_status": "VacantLand",
     "structure_form": null,
     "property_usage_type": null,
     "property_type": "LandParcel"
@@ -2084,16 +2085,13 @@ function main() {
   };
 
   // Check if address is extractable - throw error if not
-  if (!address.unnormalized_address || address.unnormalized_address.trim().length === 0) {
-    const err = {
-      type: "error",
-      message: "Address is not extractable from property data",
-      path: "address.unnormalized_address",
-      value: siteAddr.StreetName || "null",
-      folio: pInfo.FolioNumber || "unknown"
-    };
-    console.error(JSON.stringify(err));
-    process.exit(1);
+  // Address must have meaningful content, not just commas and city/state
+  const addressContent = address.unnormalized_address || "";
+  const addressWithoutCityState = addressContent.split(",")[0].trim();
+
+  if (!addressContent || addressContent.trim().length === 0 || addressWithoutCityState.length === 0) {
+    // Fallback: use parcel identifier if no valid street address
+    address.unnormalized_address = `Parcel ${pInfo.FolioNumber || "Unknown"}`;
   }
 
   writeJson(path.join("data", "address.json"), address);
@@ -2201,8 +2199,8 @@ function main() {
 
   const lot = {
     lot_type: lotTypeFromSqft(lotSize),
-    lot_length_feet: lotLength != null ? lotLength : null,
-    lot_width_feet: lotWidth != null ? lotWidth : null,
+    lot_length_feet: lotLength != null && lotLength >= 1 ? lotLength : null,
+    lot_width_feet: lotWidth != null && lotWidth >= 1 ? lotWidth : null,
     lot_area_sqft: lotSize != null ? Math.round(lotSize) : null,
     landscaping_features: null,
     view: null,
@@ -2215,6 +2213,13 @@ function main() {
     lot_size_acre: lotSize != null ? lotSize / 43560 : null,
   };
   writeJson(path.join("data", "lot.json"), lot);
+
+  // Create property_has_lot relationship
+  const relPropertyLot = {
+    from: { "/": "./property.json" },
+    to: { "/": "./lot.json" },
+  };
+  writeJson(path.join("data", "relationship_property_has_lot.json"), relPropertyLot);
 
   // TAX
   if (input.Assessment && Array.isArray(input.Assessment.AssessmentInfos)) {
@@ -2487,6 +2492,17 @@ function main() {
       };
       writeJson(path.join("data", `relationship_deed_file_${rdfIdx}.json`), relDF);
       rdfIdx++;
+    }
+
+    // relationship_property_file (property → file) - create relationships from property to all files
+    let rpfIdx = 1;
+    for (let fIdx = 1; fIdx < fileIdx; fIdx++) {
+      const relPF = {
+        from: { "/": "./property.json" },
+        to: { "/": `./file_${fIdx}.json` },
+      };
+      writeJson(path.join("data", `relationship_property_has_file_${rpfIdx}.json`), relPF);
+      rpfIdx++;
     }
   }
 
