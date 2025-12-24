@@ -480,6 +480,38 @@ const propertyTypeMapping=[
     "structure_form": null,
     "property_usage_type": "Utility",
     "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "HOTELS AND MOTELS",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Hotel",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "MORTUARY/CEMETARY",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "MortuaryCemetery",
+    "property_type": "LandParcel"
+  },
+  {
+    "property_usecode": "MISCELLANEOUS",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "Unknown",
+    "property_type": "Building"
+  },
+  {
+    "property_usecode": "CENTERALLY ASSESSED",
+    "ownership_estate_type": "FeeSimple",
+    "build_status": "Improved",
+    "structure_form": null,
+    "property_usage_type": "GovernmentProperty",
+    "property_type": "Building"
   }
 ]
 function readJSON(p) {
